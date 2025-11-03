@@ -1,0 +1,37 @@
+---
+- name: Backup VyOS Router Configurations
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Get current date
+      ansible.builtin.command: date +%Y-%m-%d
+      register: date_output
+      changed_when: false
+      run_once: true
+      delegate_to: localhost
+
+    - name: Set backup date
+      ansible.builtin.set_fact:
+        backup_date: "{{ date_output.stdout }}"
+
+    - name: Create backup directory if it doesn't exist
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/../backups/{{ backup_date }}"
+        state: directory
+      run_once: true
+      delegate_to: localhost
+
+    - name: Collect VyOS configuration
+      ansible.netcommon.cli_command:
+        command: show configuration commands
+      register: config_output
+
+    - name: Save configuration to file
+      ansible.builtin.copy:
+        content: "{{ config_output.stdout }}"
+        dest: "{{ playbook_dir }}/../backups/{{ backup_date }}/{{ inventory_hostname }}_{{ backup_date }}.cfg"
+      delegate_to: localhost
+
+    - name: Display backup status
+      ansible.builtin.debug:
+        msg: "Configuration backup completed for {{ inventory_hostname }}"

@@ -25,3 +25,7 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Router configurations backup
+ansible/backups/
+*.cfg
