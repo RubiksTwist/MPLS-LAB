@@ -1,0 +1,7 @@
+---
+- name: Check ping connectivity from control node
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Ping test to host IP
+      ansible.builtin.ping:
