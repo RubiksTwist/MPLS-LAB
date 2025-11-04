@@ -9,6 +9,14 @@ rules:
     check-keys: false  # Allows yes/no in keys which is common in Ansible
   comments:
     min-spaces-from-content: 1  # More flexible comment spacing
+  comments-indentation:
+    level: warning
+    allow-multiline: false
+  braces:
+    max-spaces-inside: 1
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
 
 ignore: |
   .venv/
