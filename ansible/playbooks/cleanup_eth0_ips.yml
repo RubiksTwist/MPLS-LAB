@@ -1,0 +1,57 @@
+---
+# Cleanup eth0 - Remove old IPs and keep only the new static IPs
+# This removes the old 192.168.100.130-135 addresses and keeps only .11-.16
+
+- name: Remove old IP addresses from eth0
+  hosts: all
+  gather_facts: false
+  vars:
+    old_ips:
+      CE1: "192.168.100.130/24"
+      PE1: "192.168.100.131/24"
+      P1: "192.168.100.132/24"
+      P2: "192.168.100.133/24"
+      PE2: "192.168.100.134/24"
+      CE2: "192.168.100.135/24"
+    
+    new_ips:
+      CE1: "192.168.100.11/24"
+      PE1: "192.168.100.12/24"
+      P1: "192.168.100.13/24"
+      P2: "192.168.100.14/24"
+      PE2: "192.168.100.15/24"
+      CE2: "192.168.100.16/24"
+
+  tasks:
+    - name: Display current migration task
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: Removing old IP {{ old_ips[inventory_hostname] }}, keeping {{ new_ips[inventory_hostname] }}"
+
+    - name: Remove old IP address from eth0
+      vyos.vyos.vyos_config:
+        lines:
+          - "delete interfaces ethernet eth0 address {{ old_ips[inventory_hostname] }}"
+        save: true
+
+    - name: Wait 3 seconds for changes to apply
+      ansible.builtin.pause:
+        seconds: 3
+      run_once: true
+
+    - name: Verify only new IP remains
+      vyos.vyos.vyos_command:
+        commands:
+          - show interfaces ethernet eth0 | grep "inet "
+      register: eth0_check
+
+    - name: Display final eth0 configuration
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ eth0_check.stdout_lines[0] }}"
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg: 
+          - "✓ Migration complete for {{ inventory_hostname }}"
+          - "  Old IP removed: {{ old_ips[inventory_hostname] }}"
+          - "  Active IP: {{ new_ips[inventory_hostname] }}"
+      when: new_ips[inventory_hostname].split('/')[0] in eth0_check.stdout[0]
