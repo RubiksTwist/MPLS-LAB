@@ -1,0 +1,13 @@
+{# Interface Configuration Template #}
+{% if router_config.interfaces is defined %}
+{% for interface_type, interfaces in router_config.interfaces.items() %}
+{% for name, settings in interfaces.items() %}
+{% if settings.address is defined %}
+set interfaces {{ interface_type }} {{ name }} address '{{ settings.address }}'
+{% endif %}
+{% if settings.description is defined %}
+set interfaces {{ interface_type }} {{ name }} description '{{ settings.description }}'
+{% endif %}
+{% endfor %}
+{% endfor %}
+{% endif %}

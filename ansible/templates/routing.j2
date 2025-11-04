@@ -1,8 +1,0 @@
-# Routing Configuration Template
-{% if router_config.protocols is defined %}
-{% for protocol, protocol_config in router_config.protocols.items() %}
-{% for key, value in protocol_config.items() %}
-set protocols {{ protocol }} {{ key }} {{ value }}
-{% endfor %}
-{% endfor %}
-{% endif %}

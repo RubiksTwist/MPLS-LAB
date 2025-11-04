@@ -1,0 +1,22 @@
+{# Routing Configuration Template #}
+{% if router_config.protocols is defined %}
+{# OSPF Configuration #}
+{% if router_config.protocols.ospf is defined %}
+{% for area, area_config in router_config.protocols.ospf.area.items() %}
+{% if area_config.network is string %}
+set protocols ospf area {{ area }} network '{{ area_config.network }}'
+{% else %}
+{% for network in area_config.network %}
+set protocols ospf area {{ area }} network '{{ network }}'
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{# Static Routes #}
+{% if router_config.protocols.static is defined %}
+{% for prefix, route in router_config.protocols.static.route.items() %}
+set protocols static route {{ prefix }} next-hop '{{ route.next_hop }}'
+{% endfor %}
+{% endif %}
+{% endif %}

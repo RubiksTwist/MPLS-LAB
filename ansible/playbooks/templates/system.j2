@@ -1,0 +1,16 @@
+{# System Configuration Template #}
+{% if common_settings.system is defined %}
+{% if common_settings.system.host_name is defined %}
+set system host-name '{{ common_settings.system.host_name }}'
+{% endif %}
+{% if common_settings.system.login is defined %}
+{% for user in common_settings.system.login.users | default([]) %}
+set system login user {{ user.name }} authentication plaintext-password '{{ user.password }}'
+{% endfor %}
+{% endif %}
+{% if common_settings.system.syslog is defined %}
+{% for facility, settings in common_settings.system.syslog.items() %}
+set system syslog {{ facility }} facility {{ settings.facility }} level '{{ settings.level }}'
+{% endfor %}
+{% endif %}
+{% endif %}

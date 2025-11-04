@@ -3,20 +3,57 @@
   hosts: all
   gather_facts: no
   tasks:
-    - name: Configure system settings
+    - name: Configure hostname
       vyos.vyos.vyos_config:
-        lines: "{{ lookup('ansible.builtin.template', 'templates/system.j2') | from_yaml | vyos_config_lines }}"
-      when: common_settings is defined
+        lines:
+          - set system host-name {{ inventory_hostname }}
+      when: common_settings.system.host_name is defined
 
-    - name: Configure interfaces
+    - name: Configure interface descriptions
       vyos.vyos.vyos_config:
-        lines: "{{ lookup('ansible.builtin.template', 'templates/interfaces.j2') | from_yaml | vyos_config_lines }}"
+        lines:
+          - set interfaces ethernet {{ item.key }} description '{{ item.value.description }}'
+      loop: "{{ router_config.interfaces.ethernet | dict2items }}"
       when: router_config.interfaces is defined
 
-    - name: Configure routing protocols
+    - name: Configure interface IP addresses
       vyos.vyos.vyos_config:
-        lines: "{{ lookup('ansible.builtin.template', 'templates/routing.j2') | from_yaml | vyos_config_lines }}"
-      when: router_config.protocols is defined
+        lines:
+          - set interfaces ethernet {{ item.key }} address '{{ item.value.address }}'
+      loop: "{{ router_config.interfaces.ethernet | dict2items }}"
+      when: router_config.interfaces is defined
+
+    - name: Configure OSPF networks
+      vyos.vyos.vyos_config:
+        lines:
+          - set protocols ospf area {{ item.0.key }} network '{{ item.1 }}'
+      loop: >-
+        {%- set result = [] -%}
+        {%- for area in router_config.protocols.ospf.area | dict2items -%}
+          {%- if area.value.network is string -%}
+            {%- set _ = result.append([area, area.value.network]) -%}
+          {%- else -%}
+            {%- for net in area.value.network -%}
+              {%- set _ = result.append([area, net]) -%}
+            {%- endfor -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ result }}
+      when: router_config.protocols.ospf is defined
+
+    - name: Configure static routes
+      vyos.vyos.vyos_config:
+        lines:
+          - set protocols static route {{ item.key }} next-hop {{ item.value.next_hop }}
+      loop: "{{ router_config.protocols.static.route | dict2items }}"
+      when: router_config.protocols.static is defined
+      
+    - name: Configure MPLS interfaces
+      vyos.vyos.vyos_config:
+        lines:
+          - set protocols mpls interface {{ item }}
+      loop: "{{ router_config.protocols.mpls.interface | default([]) }}"
+      when: router_config.protocols.mpls is defined
 
     - name: Save configuration
       vyos.vyos.vyos_config:
