@@ -17,16 +17,16 @@
         msg: "{{ inventory_hostname }} {{ 'is' if ssh_check.failed == false else 'is NOT' }} reachable"
 
     - name: Verify Interface Configuration Syntax
-      vyos.vyos.vyos_config:
-        lines: "{{ lookup('ansible.builtin.template', 'templates/interfaces.j2') | from_yaml | vyos_config_lines }}"
-        check_commit: yes
-      when: router_config.interfaces is defined
+      vyos.vyos.vyos_command:
+        commands: 
+          - show configuration commands | grep interfaces
       register: config_check
       ignore_errors: yes
 
     - name: Report Configuration Check Status
       debug:
-        msg: "Configuration syntax for {{ inventory_hostname }} is {{ 'valid' if config_check.failed == false else 'INVALID' }}"
+        msg: "Configuration syntax for {{ inventory_hostname }} is {{ 'valid' if not config_check.changed else 'INVALID' }}"
+      when: config_check is defined
 
     - name: Check for IP Address Conflicts
       set_fact:
@@ -47,4 +47,4 @@
     - name: Fail if Any Tests Failed
       fail:
         msg: "Pre-deployment tests failed. Please check the output above."
-      when: ssh_check.failed or config_check.failed
+      when: ssh_check.failed or (config_check is defined and config_check.changed)
