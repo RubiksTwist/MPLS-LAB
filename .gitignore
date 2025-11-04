@@ -36,3 +36,9 @@ ansible/backups/*.cfg
 *_secrets.yml
 secrets.yml
 vault.yml
+
+# Azure credentials
+.env
+.env.local
+.env.*.local
+README-AZURE-KEYVAULT.md

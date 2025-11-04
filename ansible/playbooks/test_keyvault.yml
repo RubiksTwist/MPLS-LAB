@@ -1,0 +1,110 @@
+---
+# Test playbook to verify Azure Key Vault integration
+# This demonstrates how to fetch secrets from Azure Key Vault using Service Principal
+
+- name: Test Azure Key Vault Integration
+  hosts: localhost
+  gather_facts: false
+  
+  vars:
+    # These environment variables must be set before running:
+    # - AZURE_CLIENT_ID
+    # - AZURE_CLIENT_SECRET
+    # - AZURE_TENANT_ID
+    # - AZURE_KEYVAULT_NAME
+    
+    keyvault_name: "{{ lookup('env', 'AZURE_KEYVAULT_NAME') }}"
+  
+  tasks:
+    - name: Verify Azure environment variables are set
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'AZURE_CLIENT_ID') | length > 0
+          - lookup('env', 'AZURE_CLIENT_SECRET') | length > 0
+          - lookup('env', 'AZURE_TENANT_ID') | length > 0
+          - keyvault_name | length > 0
+        fail_msg: |
+          Azure environment variables not set. Please run:
+          export $(cat .env | xargs)
+        success_msg: "Azure environment variables are configured"
+
+    - name: Test Python Azure SDK availability
+      ansible.builtin.command:
+        cmd: python3 -c "import azure.keyvault.secrets; import azure.identity; print('Azure SDK OK')"
+      register: python_test
+      changed_when: false
+      failed_when: python_test.rc != 0
+
+    - name: Display Python SDK test result
+      ansible.builtin.debug:
+        msg: "{{ python_test.stdout }}"
+
+    - name: Fetch VyOS password from Azure Key Vault
+      ansible.builtin.shell: |
+        python3 << 'PYTHON_EOF'
+        import os
+        from azure.keyvault.secrets import SecretClient
+        from azure.identity import ClientSecretCredential
+
+        # Get credentials from environment
+        tenant_id = os.environ['AZURE_TENANT_ID']
+        client_id = os.environ['AZURE_CLIENT_ID']
+        client_secret = os.environ['AZURE_CLIENT_SECRET']
+        vault_name = os.environ['AZURE_KEYVAULT_NAME']
+
+        # Create credential
+        credential = ClientSecretCredential(
+            tenant_id=tenant_id,
+            client_id=client_id,
+            client_secret=client_secret
+        )
+
+        # Connect to Key Vault
+        vault_url = f"https://{vault_name}.vault.azure.net"
+        client = SecretClient(vault_url=vault_url, credential=credential)
+
+        # Retrieve secret
+        secret = client.get_secret("vyos-password")
+        print(secret.value)
+        PYTHON_EOF
+      register: keyvault_result
+      changed_when: false
+      no_log: false  # Temporarily show output for debugging
+      environment:
+        AZURE_CLIENT_ID: "{{ lookup('env', 'AZURE_CLIENT_ID') }}"
+        AZURE_CLIENT_SECRET: "{{ lookup('env', 'AZURE_CLIENT_SECRET') }}"
+        AZURE_TENANT_ID: "{{ lookup('env', 'AZURE_TENANT_ID') }}"
+        AZURE_KEYVAULT_NAME: "{{ keyvault_name }}"
+
+    - name: Set password as fact
+      ansible.builtin.set_fact:
+        vyos_password: "{{ keyvault_result.stdout | trim }}"
+      no_log: true
+
+    - name: Verify password was retrieved
+      ansible.builtin.assert:
+        that:
+          - vyos_password is defined
+          - vyos_password | length > 0
+        success_msg: "✓ Successfully retrieved VyOS password from Azure Key Vault"
+        fail_msg: "✗ Failed to retrieve password from Key Vault"
+
+    - name: Display password length (not the actual password)
+      ansible.builtin.debug:
+        msg: "Password retrieved successfully (length: {{ vyos_password | length }} characters)"
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "╔════════════════════════════════════════════════════╗"
+          - "║  Azure Key Vault Integration Test: SUCCESS  ✓     ║"
+          - "╚════════════════════════════════════════════════════╝"
+          - ""
+          - "Key Vault: {{ keyvault_name }}"
+          - "Secret: vyos-password"
+          - "Status: Retrieved successfully"
+          - ""
+          - "Next steps:"
+          - "1. Update ansible/playbooks/group_vars/vyos_secrets.yml"
+          - "2. Replace plaintext password with Key Vault lookup"
+          - "3. Test with: ansible-playbook ansible/playbooks/connectivity_check.yml"

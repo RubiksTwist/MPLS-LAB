@@ -41,6 +41,21 @@ ansible-lint ansible/
 # Or use VS Code tasks (Ctrl+Shift+P -> "Run Task")
 ```
 
+## Security: Azure Key Vault Integration
+
+For production environments, store VyOS passwords in Azure Key Vault instead of plaintext:
+
+```bash
+# See detailed setup guide
+cat README-AZURE-KEYVAULT.md
+
+# Quick start:
+# 1. Create Azure Key Vault and Service Principal
+# 2. Copy .env.example to .env and add your credentials
+# 3. Load environment: export $(grep -v '^#' .env | grep -v '^$' | xargs)
+# 4. Test: ansible-playbook ansible/playbooks/test_keyvault.yml
+```
+
 ## Troubleshooting
 
 ### After Router Restart
