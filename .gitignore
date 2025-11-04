@@ -11,6 +11,7 @@ ENV/
 
 # Ansible
 *.retry
+/tmp/ansible_facts/
 
 # OS specific files
 .DS_Store
@@ -29,7 +30,7 @@ Thumbs.db
 
 # Router configurations backup
 ansible/backups/
-*.cfg
+ansible/backups/*.cfg
 
 # Sensitive data
 *_secrets.yml
