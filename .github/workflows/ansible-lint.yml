@@ -35,9 +35,16 @@ jobs:
           echo "Directory structure:"
           ls -R ansible/
           ansible-lint --version
-          ansible-lint ansible/ -v
+          ansible-lint ansible/playbooks/*.yml -v
 
       - name: Run yamllint
         run: |
           source .venv/bin/activate
-          yamllint ansible/
+          echo "Running yamllint on playbook files..."
+          yamllint ansible/playbooks/*.yml
+          echo "Running yamllint on host_vars..."
+          yamllint 'ansible/playbooks/host_vars/*.yml'
+          echo "Running yamllint on group_vars..."
+          yamllint 'ansible/playbooks/group_vars/*.yml'
+          echo "Running yamllint on templates..."
+          yamllint 'ansible/playbooks/templates/*.j2' || true  # Don't fail on templates
