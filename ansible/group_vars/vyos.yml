@@ -1,0 +1,11 @@
+---
+# Common settings for all VyOS routers
+common_settings:
+  system:
+    host_name: "{{ inventory_hostname }}"
+    syslog:
+      global:
+        facility: all
+        level: info
+  service:
+    ssh: {}  # Enable SSH service with default settings

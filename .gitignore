@@ -29,3 +29,8 @@ Thumbs.db
 # Router configurations backup
 ansible/backups/
 *.cfg
+
+# Sensitive data
+*_secrets.yml
+secrets.yml
+vault.yml

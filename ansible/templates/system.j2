@@ -1,0 +1,6 @@
+# System Configuration Template
+{% if common_settings.system is defined %}
+{% for key, value in common_settings.system.items() %}
+set system {{ key }} {{ value }}
+{% endfor %}
+{% endif %}

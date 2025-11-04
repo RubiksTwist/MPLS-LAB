@@ -1,0 +1,10 @@
+# Interface Configuration Template
+{% if router_config.interfaces is defined %}
+{% for interface_type, interfaces in router_config.interfaces.items() %}
+{% for name, settings in interfaces.items() %}
+{% for key, value in settings.items() %}
+set interfaces {{ interface_type }} {{ name }} {{ key }} '{{ value }}'
+{% endfor %}
+{% endfor %}
+{% endfor %}
+{% endif %}

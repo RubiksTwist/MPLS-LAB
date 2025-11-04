@@ -1,0 +1,23 @@
+---
+- name: Configure VyOS Routers
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Configure system settings
+      vyos.vyos.vyos_config:
+        lines: "{{ lookup('ansible.builtin.template', 'templates/system.j2') | from_yaml | vyos_config_lines }}"
+      when: common_settings is defined
+
+    - name: Configure interfaces
+      vyos.vyos.vyos_config:
+        lines: "{{ lookup('ansible.builtin.template', 'templates/interfaces.j2') | from_yaml | vyos_config_lines }}"
+      when: router_config.interfaces is defined
+
+    - name: Configure routing protocols
+      vyos.vyos.vyos_config:
+        lines: "{{ lookup('ansible.builtin.template', 'templates/routing.j2') | from_yaml | vyos_config_lines }}"
+      when: router_config.protocols is defined
+
+    - name: Save configuration
+      vyos.vyos.vyos_config:
+        save: yes

@@ -1,0 +1,28 @@
+---
+# PE1 specific configurations
+router_config:
+  interfaces:
+    ethernet:
+      eth0:
+        description: "Management Interface"
+        address: "192.168.100.131/24"
+      eth1:
+        description: "To CE1"
+        address: "10.0.1.1/30"
+      eth2:
+        description: "To P1"
+        address: "10.0.2.2/30"
+  protocols:
+    ospf:
+      area:
+        "0":
+          network: 
+            - "10.0.1.0/30"
+            - "10.0.2.0/30"
+    mpls:
+      interface:
+        - "eth2"
+    static:
+      route:
+        "0.0.0.0/0":
+          next_hop: "192.168.100.1"
