@@ -76,6 +76,55 @@ ansible/
 └── backups/               # Router config backups (gitignored)
 ```
 
+## How Ansible Works in This Environment
+
+### Connection Method: SSH + CLI (Not NETCONF)
+
+This lab uses **`network_cli`** connection type with **SSH**, not NETCONF. Here's how it works:
+
+1. **Connection Layer**: Ansible connects via SSH using the `paramiko` library (Python SSH client)
+2. **Command Execution**: Commands are sent directly to the VyOS CLI (like you would manually)
+3. **Configuration**: Uses `vyos.vyos.vyos_config` and `vyos.vyos.vyos_command` modules from the VyOS Ansible collection
+
+### Why network_cli instead of NETCONF?
+
+- **Simplicity**: VyOS CLI is straightforward and well-documented
+- **Compatibility**: Works with all VyOS versions (NETCONF requires specific config)
+- **Reliability**: Direct CLI commands are predictable in lab environments
+- **Debugging**: Easier to troubleshoot - you can see exactly what commands are run
+
+### Key Configuration (in `hosts.ini`)
+
+```ini
+ansible_connection=network_cli    # Use CLI-based connection
+ansible_network_os=vyos.vyos.vyos # VyOS-specific CLI parser
+ansible_transport=paramiko        # Use paramiko for SSH
+ansible_user=vyos                 # SSH username
+ansible_password=vyos             # SSH password (plaintext for lab)
+```
+
+### Example: How a Playbook Works
+
+When you run a playbook like `connectivity_check.yml`:
+
+1. Ansible SSH's into each router (e.g., `ssh vyos@192.168.100.11`)
+2. Enters VyOS CLI session
+3. Sends commands like `show configuration commands`
+4. Parses the output
+5. Returns results to Ansible for processing
+
+### Security Note
+
+⚠️ **Lab Environment Only**: This setup uses:
+- Plaintext passwords in inventory
+- SSH host key checking disabled
+- Password-based auth (no SSH keys)
+
+For production, you should use:
+- Ansible Vault for encrypted passwords
+- SSH key authentication
+- Proper host key verification
+
 ## Development
 
 See [README-LINTING.md](README-LINTING.md) for linting setup and pre-commit hooks.
