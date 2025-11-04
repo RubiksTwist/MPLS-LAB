@@ -1,0 +1,41 @@
+---
+- name: Ping between VyOS routers
+  hosts: vyos
+  gather_facts: no
+  tasks:
+    - name: Build peer management IP list
+      set_fact:
+        peers: >-
+          {{ groups['vyos']
+             | reject('equalto', inventory_hostname)
+             | map('extract', hostvars, 'ansible_host')
+             | list }}
+
+    - name: Show peers to be pinged
+      debug:
+        var: peers
+
+    - name: Ping each peer from the router
+      vyos.vyos.vyos_command:
+        commands:
+          - "ping {{ item }} count 3"
+      loop: "{{ peers }}"
+      register: ping_outputs
+      ignore_errors: yes
+
+    - name: Summarize successful pings
+      debug:
+        msg: "{{ item.item }} => SUCCESS; stdout={{ item.stdout[0] | default('') }}"
+      loop: "{{ ping_outputs.results }}"
+      when: item.failed is not defined or item.failed == false
+
+    - name: Summarize failed pings
+      debug:
+        msg: "{{ item.item }} => FAIL; stdout={{ item.stdout[0] | default('') }}"
+      loop: "{{ ping_outputs.results }}"
+      when: item.failed is defined and item.failed == true
+
+    - name: Fail if any ping failed
+      fail:
+        msg: "One or more ping tests failed from {{ inventory_hostname }}. See summary above."
+      when: ping_outputs.results | selectattr('failed','equalto',true) | list | length > 0
