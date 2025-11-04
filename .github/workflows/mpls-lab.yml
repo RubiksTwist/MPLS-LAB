@@ -31,10 +31,13 @@ jobs:
       - name: Run YAML lint
         run: |
           source .venv/bin/activate
-          echo "Current directory structure:"
-          ls -R
-          echo "Linting all YAML files..."
-          find ansible/playbooks/ -name "*.yml" -exec yamllint {} +
+          echo "Running yamllint in strict mode with detailed output..."
+          yamllint -f parsable -s ansible/playbooks/backup_config.yml
+          yamllint -f parsable -s ansible/playbooks/configure_routers.yml
+          yamllint -f parsable -s ansible/playbooks/connectivity_check.yml
+          yamllint -f parsable -s ansible/playbooks/ping_between_routers.yml
+          yamllint -f parsable -s ansible/playbooks/group_vars/vyos.yml
+          yamllint -f parsable -s ansible/playbooks/host_vars/*.yml
           
       - name: Run Ansible lint
         run: |
