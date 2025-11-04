@@ -1,0 +1,16 @@
+skip_list:
+  - no-changed-when  # Skip requiring changed_when for commands
+  - no-handler  # Allow tasks without handlers
+  - yaml[line-length]  # Already covered by yamllint
+  - command-instead-of-module  # Allow direct commands when needed for network devices
+
+exclude_paths:
+  - .venv/
+  - ansible/backups/
+  - .github/
+
+warn_list:
+  - var-naming[no-role-prefix]  # Warn about variable naming conventions
+  - jinja[spacing]  # Warn about Jinja2 template spacing
+
+use_default_rules: true

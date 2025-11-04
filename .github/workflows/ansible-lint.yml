@@ -1,0 +1,36 @@
+name: Ansible Lint
+
+on:
+  push:
+    paths:
+      - 'ansible/**'
+  pull_request:
+    paths:
+      - 'ansible/**'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install ansible-lint yamllint
+          
+      - name: Run ansible-lint
+        run: |
+          source .venv/bin/activate
+          ansible-lint ansible/
+
+      - name: Run yamllint
+        run: |
+          source .venv/bin/activate
+          yamllint ansible/
