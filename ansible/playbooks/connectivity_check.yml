@@ -1,7 +1,7 @@
 ---
 - name: Verify Network Connectivity and Configuration
   hosts: all
-  gather_facts: no
+  gather_facts: false
   tasks:
     - name: Check Management Interface Connectivity
       wait_for:
@@ -10,7 +10,7 @@
         timeout: 10
       delegate_to: localhost
       register: ssh_check
-      ignore_errors: yes
+      ignore_errors: true
 
     - name: Report SSH Connectivity Status
       debug:
@@ -18,20 +18,25 @@
 
     - name: Verify Interface Configuration Syntax
       vyos.vyos.vyos_command:
-        commands: 
+        commands:
           - show configuration commands | grep interfaces
       register: config_check
-      ignore_errors: yes
+      ignore_errors: true
 
     - name: Report Configuration Check Status
       debug:
-        msg: "Configuration syntax for {{ inventory_hostname }} is {{ 'valid' if not config_check.changed else 'INVALID' }}"
+        msg: >
+        Configuration syntax for {{ inventory_hostname }} is
+        {{ 'valid' if not config_check.changed else 'INVALID' }}
       when: config_check is defined
 
     - name: Check for IP Address Conflicts
       set_fact:
         ip_addresses: "{{ ip_addresses | default([]) + [item.address] }}"
-      loop: "{{ router_config.interfaces.ethernet | dict2items | json_query('[].value.address') }}"
+        loop: >-
+          {{ router_config.interfaces.ethernet |
+             dict2items |
+             json_query('[].value.address') }}
       when: router_config.interfaces is defined
       delegate_to: localhost
       run_once: true
