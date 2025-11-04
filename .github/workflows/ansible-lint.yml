@@ -23,12 +23,19 @@ jobs:
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install ansible-lint yamllint
+          pip install --no-cache-dir ansible ansible-lint yamllint
           
       - name: Run ansible-lint
         run: |
           source .venv/bin/activate
-          ansible-lint ansible/
+          echo "Python version:"
+          python --version
+          echo "Ansible version:"
+          ansible --version
+          echo "Directory structure:"
+          ls -R ansible/
+          ansible-lint --version
+          ansible-lint ansible/ -v
 
       - name: Run yamllint
         run: |
