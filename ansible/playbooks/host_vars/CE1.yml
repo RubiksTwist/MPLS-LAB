@@ -11,7 +11,7 @@ router_config:
         address: "10.0.1.2/30"
   protocols:
     ospf:
-      area: 
+      area:
         "0":
           network: "10.0.1.0/30"
     static:

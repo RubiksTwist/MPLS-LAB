@@ -16,7 +16,7 @@ router_config:
     ospf:
       area:
         "0":
-          network: 
+          network:
             - "10.0.1.0/30"
             - "10.0.2.0/30"
     mpls:
