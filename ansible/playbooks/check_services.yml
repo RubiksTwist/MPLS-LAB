@@ -1,0 +1,111 @@
+---
+- name: Service checks summary
+  hosts: vyos
+  gather_facts: false
+  vars:
+    # Select which services to check. Options: ospf, ldp, bgp
+    services_to_check: ["ospf", "ldp"]
+    # Optional minimum neighbors per service; used only if require_neighbors is true
+    min_neighbors:
+      ospf: 1
+      ldp: 1
+      bgp: 1
+    # When true, fail a host if any selected service has fewer than its min neighbors
+    require_neighbors: false
+
+  tasks:
+    - name: Collect OSPFv2 neighbors
+      when: '"ospf" in services_to_check'
+      vyos.vyos.vyos_command:
+        commands:
+          - show ip ospf neighbor
+      register: ospf_out
+      ignore_errors: true
+
+    - name: Collect OSPFv3 neighbors (optional)
+      when: '"ospfv3" in services_to_check'
+      vyos.vyos.vyos_command:
+        commands:
+          - show ipv6 ospf6 neighbor
+      register: ospf6_out
+      ignore_errors: true
+
+    - name: Collect LDP neighbors and discovery
+      when: '"ldp" in services_to_check'
+      vyos.vyos.vyos_command:
+        commands:
+          - show mpls ldp neighbor
+          - show mpls ldp discovery
+      register: ldp_out
+      ignore_errors: true
+
+    - name: Collect BGP summary (optional)
+      when: '"bgp" in services_to_check'
+      vyos.vyos.vyos_command:
+        commands:
+          - show ip bgp summary
+      register: bgp_out
+      ignore_errors: true
+
+    - name: Parse service raw outputs
+      ansible.builtin.set_fact:
+        # OSPFv2
+        ospf_text: "{{ (ospf_out.stdout[0] | default('')) if (ospf_out is defined and ospf_out.stdout is defined and (ospf_out.stdout | length) > 0) else '' }}"
+        # OSPFv3 (FRR uses ospf6)
+        ospf6_text: "{{ (ospf6_out.stdout[0] | default('')) if (ospf6_out is defined and ospf6_out.stdout is defined and (ospf6_out.stdout | length) > 0) else '' }}"
+        # LDP
+        ldp_text: "{{ (ldp_out.stdout | default([])) | join('\n') if (ldp_out is defined) else '' }}"
+        # BGP
+        bgp_text: "{{ (bgp_out.stdout[0] | default('')) if (bgp_out is defined and bgp_out.stdout is defined and (bgp_out.stdout | length) > 0) else '' }}"
+
+    - name: Debug OSPF raw text (verbose)
+      ansible.builtin.debug:
+        var: ospf_text
+      when: ansible_verbosity | int >= 2 and ('ospf' in services_to_check)
+
+    - name: Compute neighbor counts
+      ansible.builtin.set_fact:
+        # OSPFv2 Full neighbors: lines like "<neighbor-id> <pri> Full/... <deadtime> <addr> <iface> ..."
+        ospf_v2_full_count: >-
+          {{ (ospf_text | regex_findall('Full') | length) | int }}
+        # OSPFv3 Full neighbors (optional): format varies; count lines that include ' Full' in neighbor rows
+        ospf_v3_full_count: >-
+          {{ ((ospf6_text | regex_findall('^.*?\\bFull\\b.*$', multiline=True) | length) | int)
+             if ('ospfv3' in services_to_check) else 0 }}
+        # LDP neighbor count (unique IPs seen)
+        ldp_nbr_count: "{{ ((ldp_text | regex_findall('(?:\\d{1,3}\\.){3}\\d{1,3}') | unique) | length) | int }}"
+        # BGP established neighbors: lines with 'Estab', 'Established', or trailing number
+        bgp_estab_count: >-
+          {{ ( (bgp_text.splitlines() | select('search','(Estab|Established|\\s\\d+\\s*$)') | list | length) | int ) }}
+
+    - name: Compute OSPF total across enabled families
+      ansible.builtin.set_fact:
+        ospf_total_full: "{{ (ospf_v2_full_count | int) + (ospf_v3_full_count | int) }}"
+
+    - name: Compose service status strings
+      ansible.builtin.set_fact:
+        ospf_status: "{{ 'ok(' ~ ospf_total_full ~ ')' if (\"ospf\" in services_to_check) else 'skip' }}"
+        ldp_status:  "{{ 'ok(' ~ ldp_nbr_count  ~ ')' if (\"ldp\"  in services_to_check) else 'skip' }}"
+        bgp_status:  "{{ 'ok(' ~ bgp_estab_count ~ ')' if (\"bgp\" in services_to_check) else 'skip' }}"
+
+    - name: Service summary
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}
+          | ospf={{ ospf_status }}
+          | ldp={{ ldp_status }}
+          | bgp={{ bgp_status }}
+
+    - name: Fail if required neighbors are not met (optional)
+      ansible.builtin.fail:
+        msg: >-
+          One or more services below required neighbors:
+          ospf={{ ospf_total_full }}/{{ min_neighbors.ospf | default(1) }},
+          ldp={{ ldp_nbr_count }}/{{ min_neighbors.ldp | default(1) }},
+          bgp={{ bgp_estab_count }}/{{ min_neighbors.bgp | default(1) }}
+      when: >-
+        require_neighbors | bool and (
+          (('ospf' in services_to_check) and (ospf_total_full | int) < (min_neighbors.ospf | default(1) | int)) or
+          (('ldp' in services_to_check) and (ldp_nbr_count | int) < (min_neighbors.ldp | default(1) | int)) or
+          (('bgp' in services_to_check) and (bgp_estab_count | int) < (min_neighbors.bgp | default(1) | int))
+        )

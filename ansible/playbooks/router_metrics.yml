@@ -1,0 +1,138 @@
+---
+- name: Router metrics summary
+  hosts: vyos
+  gather_facts: false
+  tasks:
+    - name: Collect version
+      vyos.vyos.vyos_command:
+        commands:
+          - show version
+      register: version_out
+      ignore_errors: true
+    - name: Collect uptime (human)
+      vyos.vyos.vyos_command:
+        commands:
+          - show system uptime
+      register: uptime_cmd
+      ignore_errors: true
+
+    - name: Collect uptime seconds (from /proc/uptime)
+      vyos.vyos.vyos_command:
+        commands:
+          - cat /proc/uptime
+      register: uptime_proc
+      ignore_errors: true
+
+    - name: Collect load averages
+      vyos.vyos.vyos_command:
+        commands:
+          - cat /proc/loadavg
+      register: loadavg_out
+      ignore_errors: true
+
+    - name: Collect memory info
+      vyos.vyos.vyos_command:
+        commands:
+          - cat /proc/meminfo
+      register: meminfo_out
+      ignore_errors: true
+
+    - name: Collect interface states
+      vyos.vyos.vyos_command:
+        commands:
+          - ip -brief link
+      register: link_out
+      ignore_errors: true
+
+    - name: Parse uptime, version, load, memory, interfaces (primitives)
+      ansible.builtin.set_fact:
+        uptime_text: "{{ uptime_cmd.stdout[0] | default('') }}"
+        # Extract first line like "Uptime: 6h 52m 52s"
+        uptime_line: "{{ uptime_cmd.stdout[0] | default('') | regex_search('Uptime:[^\n]*') | default('Uptime: N/A') }}"
+        # Convert /proc/uptime first number to seconds if available; else derive from uptime_line (d/h/m/s)
+        uptime_seconds: >-
+          {{
+            (
+              (
+                (uptime_proc.stdout[0] | default('') | regex_search('^[0-9]+\.?[0-9]*') | default('0')) | float | int
+              )
+              if (uptime_proc is defined and uptime_proc.stdout is defined and (uptime_proc.stdout[0] | default('')) | length > 0)
+              else (
+                (
+                  (uptime_cmd.stdout[0] | default('') | regex_search('\\b[0-9]+d\\b') | default('0') | regex_replace('d','')) | int * 86400
+                )
+                + (
+                  (uptime_cmd.stdout[0] | default('') | regex_search('\\b[0-9]+h\\b') | default('0') | regex_replace('h','')) | int * 3600
+                )
+                + (
+                  (uptime_cmd.stdout[0] | default('') | regex_search('\\b[0-9]+m\\b') | default('0') | regex_replace('m','')) | int * 60
+                )
+                + (
+                  (uptime_cmd.stdout[0] | default('') | regex_search('\\b[0-9]+s\\b') | default('0') | regex_replace('s','')) | int
+                )
+              )
+            )
+          }}
+        # Version, load averages, memory usage, interfaces up
+        version_line: "{{ (version_out.stdout[0] | default('')) | trim }}"
+      
+        load1: "{{ (loadavg_out.stdout[0] | default('0 0 0')).split()[0] | default('0') }}"
+        load5: "{{ (loadavg_out.stdout[0] | default('0 0 0')).split()[1] | default('0') }}"
+        load15: "{{ (loadavg_out.stdout[0] | default('0 0 0')).split()[2] | default('0') }}"
+        mem_total_kb: "{{ (meminfo_out.stdout[0] | default('') | regex_search('MemTotal:\\s*(\\d+)') | default('0')) | int }}"
+        mem_avail_kb: "{{ (meminfo_out.stdout[0] | default('') | regex_search('MemAvailable:\\s*(\\d+)') | default('0')) | int }}"
+        mem_free_kb: "{{ (meminfo_out.stdout[0] | default('') | regex_search('MemFree:\\s*(\\d+)') | default('0')) | int }}"
+        mem_buffers_kb: "{{ (meminfo_out.stdout[0] | default('') | regex_search('Buffers:\\s*(\\d+)') | default('0')) | int }}"
+        mem_cached_kb: "{{ (meminfo_out.stdout[0] | default('') | regex_search('Cached:\\s*(\\d+)') | default('0')) | int }}"
+        up_if_count: "{{ (link_out.stdout[0] | default('') | regex_findall('^\\S+\\s+UP', multiline=True) | length) | int }}"
+
+    - name: Compute effective available memory (derived)
+      ansible.builtin.set_fact:
+        mem_avail_eff_kb: >-
+          {{
+            (mem_avail_kb if (mem_avail_kb | int) > 0 else (mem_free_kb + mem_buffers_kb + mem_cached_kb))
+          }}
+
+    - name: Compute memory usage percent and finalize derived fields
+      ansible.builtin.set_fact:
+        mem_used_pct: >-
+          {{
+            (100 - (((mem_avail_eff_kb | default(0)) | float)
+                    / ((((mem_total_kb | default(1)) | float)) + 0.00001) * 100))
+            | round(0, 'common') | int
+            if (mem_total_kb | int) > 0 else omit
+          }}
+        version_display: >-
+          {{
+            (version_line | default('') | regex_search('Version:\\s*[^\n]*'))
+            or (((version_line | default('')).split('\\n') | first) | default('N/A'))
+          }}
+        version_short: >-
+          {{
+            (version_out.stdout[0] | default('') | regex_findall('^Version:\\s*(.*)$', multiline=True) | first | default('N/A')) | trim
+          }}
+        uptime_compact: >-
+          {{
+            (uptime_line | default('') | regex_replace('^Uptime:\\s*','') | regex_replace('\\s+',''))
+          }}
+        mem_display: >-
+          {{ (mem_used_pct | string) ~ '%' if (mem_used_pct is defined) else 'N/A' }}
+
+    - name: Metrics summary
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} | up={{ uptime_compact }} (~{{ uptime_seconds | default(0) }}s) | ver={{ version_short }} | load={{ load1 }}/{{ load5 }}/{{ load15 }} | mem={{ mem_display }} | if_up={{ up_if_count }}"
+
+    - name: Fail if uptime below threshold (optional)
+      ansible.builtin.fail:
+        msg: "Uptime {{ uptime_seconds }}s below threshold {{ min_uptime_seconds }}s"
+      when: min_uptime_seconds is defined and (uptime_seconds | int) < (min_uptime_seconds | int)
+
+    - name: Fail if load average too high (optional)
+      ansible.builtin.fail:
+        msg: "Load1 {{ load1 }} above threshold {{ max_load1 }}"
+      when: max_load1 is defined and (load1 | float) > (max_load1 | float)
+
+    - name: Fail if memory usage too high (optional)
+      ansible.builtin.fail:
+        msg: "Memory used {{ mem_used_pct }}% above threshold {{ max_mem_used_pct }}%"
+      when: max_mem_used_pct is defined and (mem_used_pct | int) > (max_mem_used_pct | int)

@@ -14,6 +14,7 @@
     - name: Show peers to be pinged
       ansible.builtin.debug:
         var: peers
+        verbosity: 3
 
     - name: Ping each peer from the router
       vyos.vyos.vyos_command:
@@ -23,17 +24,23 @@
       register: ping_outputs
       ignore_errors: true
 
-    - name: Summarize successful pings
-      ansible.builtin.debug:
-        msg: "{{ item.item }} => SUCCESS; stdout={{ item.stdout[0] | default('') }}"
-      loop: "{{ ping_outputs.results }}"
-      when: item.failed is not defined or not item.failed
+    - name: Build list of failed peers
+      ansible.builtin.set_fact:
+        failed_peers: >-
+          {{ ping_outputs.results
+             | selectattr('failed', 'equalto', true)
+             | map(attribute='item')
+             | list }}
 
-    - name: Summarize failed pings
+    - name: Summary when all pings succeed
       ansible.builtin.debug:
-        msg: "{{ item.item }} => FAIL; stdout={{ item.stdout[0] | default('') }}"
-      loop: "{{ ping_outputs.results }}"
-      when: item.failed | default(false)
+        msg: "All peers reachable from {{ inventory_hostname }} ({{ peers | length }} tested)"
+      when: (failed_peers | length) == 0
+
+    - name: Summary when some pings fail
+      ansible.builtin.debug:
+        msg: "Unreachable from {{ inventory_hostname }}: {{ failed_peers | join(', ') }}"
+      when: (failed_peers | length) > 0
 
     - name: Fail if any ping failed
       ansible.builtin.fail:

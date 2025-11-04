@@ -32,12 +32,19 @@
 
     - name: Check for IP Address Conflicts
       ansible.builtin.set_fact:
-        ip_addresses: "{{ ip_addresses | default([]) + [item.address] }}"
-      loop: >-
-        {{ router_config.interfaces.ethernet |
-           dict2items |
-           json_query('[].value.address') }}
-      when: router_config.interfaces is defined
+        ip_addresses: >-
+          {{
+            groups['all']
+            | map('extract', hostvars)
+            | selectattr('router_config', 'defined')
+            | map(attribute='router_config.interfaces.ethernet')
+            | select('defined')
+            | map('dict2items')
+            | list
+            | sum(start=[])
+            | map(attribute='value.address')
+            | list
+          }}
       delegate_to: localhost
       run_once: true
 
