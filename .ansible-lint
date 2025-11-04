@@ -1,6 +1,7 @@
 skip_list:
   - no-changed-when  # Skip requiring changed_when for commands
   - no-handler  # Allow tasks without handlers
+  - run-once  # Allow intentional use of run_once when delegating tasks
   - yaml[line-length]  # Already covered by yamllint
   - command-instead-of-module  # Allow direct commands when needed for network devices
 
