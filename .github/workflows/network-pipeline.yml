@@ -1,0 +1,86 @@
+name: Network CI/CD Pipeline
+
+on:
+  push:
+    paths:
+      - 'ansible/**'
+  pull_request:
+    paths:
+      - 'ansible/**'
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --no-cache-dir ansible ansible-lint yamllint
+
+      - name: Show workspace structure
+        run: |
+          echo "Current directory structure:"
+          ls -R ansible/
+
+      - name: Run YAML lint
+        run: |
+          source .venv/bin/activate
+          echo "Linting playbooks directory..."
+          find ansible/playbooks -maxdepth 1 -type f -name "*.yml" -exec yamllint {} \;
+          echo "Linting host_vars directory..."
+          find ansible/playbooks/host_vars -type f -name "*.yml" -exec yamllint {} \;
+          echo "Linting group_vars directory..."
+          find ansible/playbooks/group_vars -type f -name "*.yml" -exec yamllint {} \;
+          
+      - name: Run Ansible lint
+        run: |
+          source .venv/bin/activate
+          cd ansible
+          ansible-lint playbooks/*.yml -v
+
+      - name: Validate playbook syntax
+        run: |
+          source .venv/bin/activate
+          ansible-playbook ansible/playbooks/configure_routers.yml --syntax-check
+
+      - name: Check for IP conflicts
+        run: |
+          source .venv/bin/activate
+          python -c '
+          import yaml
+          import glob
+          import ipaddress
+          ips = []
+          for f in glob.glob("ansible/playbooks/host_vars/*.yml"):
+              with open(f) as file:
+                  data = yaml.safe_load(file)
+                  if "router_config" in data and "interfaces" in data["router_config"]:
+                      for iface in data["router_config"]["interfaces"].get("ethernet", {}).values():
+                          if "address" in iface:
+                              ips.append(iface["address"])
+          ip_set = set()
+          for ip in ips:
+              addr = ipaddress.ip_interface(ip).ip
+              if addr in ip_set:
+                  raise Exception(f"Duplicate IP found: {addr}")
+              ip_set.add(addr)
+          '
+
+  deploy:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    environment: production
+    steps:
+      - name: Deploy notification
+        run: |
+          echo "Configuration passed all tests and is ready for deployment"
+          echo "Manual approval required in production environment"
