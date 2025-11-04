@@ -1,7 +1,50 @@
 ---
-- name: Check ping connectivity from control node
+- name: Verify Network Connectivity and Configuration
   hosts: all
   gather_facts: no
   tasks:
-    - name: Ping test to host IP
-      ansible.builtin.ping:
+    - name: Check Management Interface Connectivity
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: 22
+        timeout: 10
+      delegate_to: localhost
+      register: ssh_check
+      ignore_errors: yes
+
+    - name: Report SSH Connectivity Status
+      debug:
+        msg: "{{ inventory_hostname }} {{ 'is' if ssh_check.failed == false else 'is NOT' }} reachable"
+
+    - name: Verify Interface Configuration Syntax
+      vyos.vyos.vyos_config:
+        lines: "{{ lookup('ansible.builtin.template', 'templates/interfaces.j2') | from_yaml | vyos_config_lines }}"
+        check_commit: yes
+      when: router_config.interfaces is defined
+      register: config_check
+      ignore_errors: yes
+
+    - name: Report Configuration Check Status
+      debug:
+        msg: "Configuration syntax for {{ inventory_hostname }} is {{ 'valid' if config_check.failed == false else 'INVALID' }}"
+
+    - name: Check for IP Address Conflicts
+      set_fact:
+        ip_addresses: "{{ ip_addresses | default([]) + [item.address] }}"
+      loop: "{{ router_config.interfaces.ethernet | dict2items | json_query('[].value.address') }}"
+      when: router_config.interfaces is defined
+      delegate_to: localhost
+      run_once: true
+
+    - name: Report IP Conflicts
+      debug:
+        msg: "WARNING: Duplicate IP found: {{ item }}"
+      when: ip_addresses | select('match', '^' + item + '$') | list | length > 1
+      loop: "{{ ip_addresses | default([]) }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Fail if Any Tests Failed
+      fail:
+        msg: "Pre-deployment tests failed. Please check the output above."
+      when: ssh_check.failed or config_check.failed
