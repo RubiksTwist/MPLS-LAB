@@ -33,11 +33,10 @@ jobs:
       - name: Run YAML lint
         run: |
           source .venv/bin/activate
-          echo "Current working directory: $(pwd)"
+          echo "Current directory structure:"
+          ls -R
           echo "Linting all YAML files..."
-          find ansible/playbooks -name "*.yml" -print0 | xargs -0 -r yamllint
-          # The -print0 and -0 flags handle filenames with spaces
-          # The -r flag prevents xargs from running if no files are found
+          find ansible/playbooks/ -name "*.yml" -exec yamllint {} +
           
       - name: Run Ansible lint
         run: |
