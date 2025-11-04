@@ -1,7 +1,7 @@
 ---
 - name: Configure VyOS Routers
   hosts: all
-  gather_facts: no
+  gather_facts: false
   tasks:
     - name: Configure hostname
       vyos.vyos.vyos_config:
@@ -47,7 +47,7 @@
           - set protocols static route {{ item.key }} next-hop {{ item.value.next_hop }}
       loop: "{{ router_config.protocols.static.route | dict2items }}"
       when: router_config.protocols.static is defined
-      
+
     - name: Configure MPLS interfaces
       vyos.vyos.vyos_config:
         lines:
@@ -57,4 +57,4 @@
 
     - name: Save configuration
       vyos.vyos.vyos_config:
-        save: yes
+        save: true
