@@ -1,0 +1,89 @@
+---
+- name: Safely migrate management IPs to static addresses
+  hosts: vyos
+  gather_facts: false
+  vars:
+    # New static IP mappings
+    new_mgmt_ips:
+      CE1: "192.168.100.11/24"
+      PE1: "192.168.100.12/24"
+      P1: "192.168.100.13/24"
+      P2: "192.168.100.14/24"
+      PE2: "192.168.100.15/24"
+      CE2: "192.168.100.16/24"
+    
+    # Step to execute: 'add_secondary', 'verify', 'switch_primary', or 'cleanup'
+    migration_step: "add_secondary"
+
+  tasks:
+    - name: Display current migration step
+      ansible.builtin.debug:
+        msg: "Executing migration step: {{ migration_step }}"
+
+    # STEP 1: Add new static IP as secondary (keeps DHCP active)
+    - name: Add new static IP as secondary address on eth0
+      when: migration_step == 'add_secondary'
+      block:
+        - name: Configure new static IP as secondary
+          vyos.vyos.vyos_config:
+            lines:
+              - "set interfaces ethernet eth0 address {{ new_mgmt_ips[inventory_hostname] }}"
+            save: true
+
+        - name: Wait 5 seconds for interface to stabilize
+          ansible.builtin.pause:
+            seconds: 5
+
+        - name: Verify new IP is configured
+          vyos.vyos.vyos_command:
+            commands:
+              - show interfaces ethernet eth0
+          register: eth0_status
+
+        - name: Display eth0 status
+          ansible.builtin.debug:
+            msg: "{{ inventory_hostname }}: New IP {{ new_mgmt_ips[inventory_hostname] }} added. DHCP still active."
+
+    # STEP 2: Verify connectivity on new IPs (run from localhost)
+    - name: Test SSH connectivity on new IP
+      when: migration_step == 'verify'
+      delegate_to: localhost
+      ansible.builtin.wait_for:
+        host: "{{ new_mgmt_ips[inventory_hostname].split('/')[0] }}"
+        port: 22
+        timeout: 10
+      register: new_ip_test
+
+    - name: Report verification result
+      when: migration_step == 'verify'
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: New IP {{ new_mgmt_ips[inventory_hostname].split('/')[0] }} is reachable!"
+
+    # STEP 3: Remove DHCP and make static IP primary
+    - name: Switch to static-only configuration
+      when: migration_step == 'switch_primary'
+      block:
+        - name: Remove DHCP from eth0
+          vyos.vyos.vyos_config:
+            lines:
+              - delete interfaces ethernet eth0 address dhcp
+            save: true
+
+        - name: Confirm static IP is primary
+          vyos.vyos.vyos_command:
+            commands:
+              - show interfaces ethernet eth0 brief
+          register: final_status
+
+        - name: Display final status
+          ansible.builtin.debug:
+            msg: "{{ inventory_hostname }}: Now using static IP {{ new_mgmt_ips[inventory_hostname] }} only"
+
+    # STEP 4: Update static routes if needed (run after inventory update)
+    - name: Update default route for new gateway (if different)
+      when: migration_step == 'cleanup'
+      vyos.vyos.vyos_config:
+        lines:
+          - set protocols static route 0.0.0.0/0 next-hop 192.168.100.1
+        save: true
+

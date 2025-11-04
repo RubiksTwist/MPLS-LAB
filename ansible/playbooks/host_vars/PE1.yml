@@ -5,7 +5,7 @@ router_config:
     ethernet:
       eth0:
         description: "Management Interface"
-        address: "192.168.100.131/24"
+        address: "192.168.100.12/24"
       eth1:
         description: "To CE1"
         address: "10.0.1.1/30"
