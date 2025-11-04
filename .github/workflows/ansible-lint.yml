@@ -36,26 +36,13 @@ jobs:
           ls -R ansible/
           ansible-lint --version
           echo "Running ansible-lint..."
-          ansible-lint ansible/playbooks/configure_routers.yml \
-                      ansible/playbooks/connectivity_check.yml \
-                      ansible/playbooks/backup_config.yml \
-                      ansible/playbooks/ping_between_routers.yml -v
+          cd ansible && ansible-lint playbooks/*.yml -v
 
       - name: Run yamllint
         run: |
           source .venv/bin/activate
           echo "Current directory structure:"
+          ls -la
           ls -R ansible/
           echo "Running yamllint checks..."
-          yamllint ansible/playbooks/configure_routers.yml \
-                    ansible/playbooks/connectivity_check.yml \
-                    ansible/playbooks/backup_config.yml \
-                    ansible/playbooks/ping_between_routers.yml \
-                    ansible/playbooks/group_vars/vyos.yml \
-                    ansible/playbooks/group_vars/vyos_secrets.yml \
-                    ansible/playbooks/host_vars/CE1.yml \
-                    ansible/playbooks/host_vars/CE2.yml \
-                    ansible/playbooks/host_vars/P1.yml \
-                    ansible/playbooks/host_vars/P2.yml \
-                    ansible/playbooks/host_vars/PE1.yml \
-                    ansible/playbooks/host_vars/PE2.yml
+          find ansible/playbooks -name "*.yml" -exec yamllint {} +
