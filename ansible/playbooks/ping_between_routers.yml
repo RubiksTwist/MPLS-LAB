@@ -4,7 +4,7 @@
   gather_facts: false
   tasks:
     - name: Build peer management IP list
-      set_fact:
+      ansible.builtin.set_fact:
         peers: >-
           {{ groups['vyos']
              | reject('equalto', inventory_hostname)
@@ -27,13 +27,13 @@
       ansible.builtin.debug:
         msg: "{{ item.item }} => SUCCESS; stdout={{ item.stdout[0] | default('') }}"
       loop: "{{ ping_outputs.results }}"
-      when: item.failed is not defined or (item.failed is boolean and item.failed == false)
+      when: item.failed is not defined or not item.failed
 
     - name: Summarize failed pings
       ansible.builtin.debug:
         msg: "{{ item.item }} => FAIL; stdout={{ item.stdout[0] | default('') }}"
       loop: "{{ ping_outputs.results }}"
-      when: item.failed is defined and (item.failed is boolean and item.failed == true)
+      when: item.failed | default(false)
 
     - name: Fail if any ping failed
       ansible.builtin.fail:
