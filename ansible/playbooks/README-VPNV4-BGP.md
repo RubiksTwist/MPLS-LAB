@@ -176,3 +176,4 @@ After VPNv4 BGP is established:
 - [RFC 4364 - BGP/MPLS IP VPNs](https://datatracker.ietf.org/doc/html/rfc4364)
 - [VyOS VRF Documentation](https://docs.vyos.io/en/latest/configuration/vrf/index.html)
 - [VyOS BGP Documentation](https://docs.vyos.io/en/latest/configuration/protocols/bgp.html)
+- [MPLS on VyOS – L3VPN Guide](https://lev-0.com/2024/01/18/mpls-on-vyos-l3vpn/) - Reference implementation

@@ -1,6 +1,15 @@
 # MPLS Lab
 
-Ansible-managed MPLS network lab with VyOS routers running in EVE-NG.
+Ansible-managed MPLS L3VPN network lab with VyOS routers running in EVE-NG.
+
+This lab implements a complete **MPLS Layer 3 VPN** service provider network with:
+- **OSPF** for IGP routing
+- **LDP** for MPLS label distribution  
+- **VRF-based L3VPN** for customer traffic isolation
+- **VPNv4 iBGP** for inter-PE route exchange
+- **eBGP** for PE-CE customer peering
+
+**Reference Implementation**: Based on [MPLS on VyOS – L3VPN](https://lev-0.com/2024/01/18/mpls-on-vyos-l3vpn/)
 
 ## Network Topology
 
@@ -27,20 +36,47 @@ CE1 eth1 <---> eth1 PE1 eth2 <---> eth1 P1 eth2 <---> eth1 P2 eth2 <---> eth1 PE
 
 ## Quick Start
 
-### Run Playbooks
+### MPLS L3VPN Configuration (In Order)
+
+Run these playbooks sequentially to build a complete MPLS L3VPN network:
 
 ```bash
-# Check connectivity and configuration
-ansible-playbook ansible/playbooks/connectivity_check.yml
+# 1. Configure OSPF (IGP for loopback reachability)
+ansible-playbook -i ansible/inventories/hosts.ini ansible/playbooks/configure_ospf_network.yml
 
-# Verify inter-router ping
-ansible-playbook ansible/playbooks/ping_between_routers.yml
+# 2. Configure MPLS LDP (Label distribution)
+ansible-playbook -i ansible/inventories/hosts.ini ansible/playbooks/configure_ldp.yml
 
-# Check router metrics (uptime, load, memory, interfaces)
-ansible-playbook ansible/playbooks/router_metrics.yml
+# 3. Configure L3VPN VRF (VRF A on PE routers)
+ansible-playbook -i ansible/inventories/hosts.ini ansible/playbooks/configure_l3vpn.yml
 
-# Check service health (OSPF, LDP, BGP)
-ansible-playbook ansible/playbooks/check_services.yml
+# 4. Configure VPNv4 iBGP (PE-to-PE route exchange)
+ansible-playbook -i ansible/inventories/hosts.ini ansible/playbooks/configure_vpnv4_bgp.yml
+
+# 5. Configure PE-CE BGP (Customer edge peering)
+ansible-playbook -i ansible/inventories/hosts.ini ansible/playbooks/configure_pe_ce_bgp.yml
+```
+
+**Expected Result**: CE1 (10.0.1.0/24) can ping CE2 (10.0.2.0/24) across the MPLS core.
+
+### Verification Playbooks
+
+```bash
+# Check MPLS connectivity end-to-end
+ansible-playbook -i ansible/inventories/hosts.ini ansible/playbooks/verification/connectivity_check.yml
+
+# Test MPLS L3VPN data plane
+ansible-playbook -i ansible/inventories/hosts.ini ansible/playbooks/verification/test_mpls_connectivity.yml
+
+# Verify MPLS configuration
+ansible-playbook -i ansible/inventories/hosts.ini ansible/playbooks/verification/verify_mpls.yml
+```
+
+### Factory Reset
+
+```bash
+# Reset all routers to clean state
+ansible-playbook -i ansible/inventories/hosts.ini ansible/playbooks/factory_reset.yml
 ```
 
 ### Linting
@@ -85,24 +121,56 @@ for i in {11..16}; do ssh-keygen -R 192.168.100.$i -f ~/.ssh/known_hosts 2>/dev/
 ### Common Issues
 
 - **SSH timeout**: Check that all routers are powered on in EVE-NG
-- **IP conflicts**: Run `connectivity_check.yml` to verify unique IPs
-- **OSPF not forming**: Check interfaces are up with `check_services.yml`
+- **VPNv4 BGP stuck in "Active"**: Reboot PE routers or manually add router-id
+- **No routes on CE routers**: Verify all 5 playbooks ran successfully in order
+- **OSPF not forming**: Check interfaces are up with verification playbooks
+- **LDP labels missing**: Ensure OSPF is operational first (prerequisite)
+
+## Additional Documentation
+
+- [README-LINTING.md](README-LINTING.md) - Linting setup and pre-commit hooks
+- Individual playbook READMEs in `ansible/playbooks/`
+
+## Architecture Overview
+
+### Control Plane
+1. **OSPF**: Provides IGP reachability between all provider routers (loopbacks)
+2. **LDP**: Distributes MPLS labels for transport LSPs
+3. **VPNv4 iBGP**: Exchanges customer routes between PE routers (with RD/RT)
+4. **eBGP**: Peers with customer edge routers for route learning
+
+### Data Plane
+- **Dual-label stack**: Transport label (outer) + VPN label (inner)
+- **PHP (Penultimate Hop Popping)**: Transport label removed at P2
+- **VRF lookup**: VPN label identifies VRF A on egress PE
+- **End-to-end**: CE1 (10.0.1.0/24) ↔ MPLS Core ↔ CE2 (10.0.2.0/24)
 
 ## Project Structure
 
 ```
 ansible/
 ├── inventories/
-│   └── hosts.ini          # Router inventory with management IPs
+│   └── hosts.ini                    # Router inventory with management IPs
 ├── playbooks/
-│   ├── connectivity_check.yml
-│   ├── ping_between_routers.yml
-│   ├── router_metrics.yml
-│   ├── check_services.yml
-│   ├── migrate_mgmt_ips.yml
-│   ├── host_vars/         # Per-router configuration
-│   └── group_vars/        # Common VyOS settings
-└── backups/               # Router config backups (gitignored)
+│   ├── configure_ospf_network.yml   # Step 1: OSPF IGP configuration
+│   ├── configure_ldp.yml            # Step 2: MPLS LDP label distribution
+│   ├── configure_l3vpn.yml          # Step 3: VRF A configuration
+│   ├── configure_vpnv4_bgp.yml      # Step 4: PE-to-PE VPNv4 iBGP
+│   ├── configure_pe_ce_bgp.yml      # Step 5: PE-to-CE eBGP peering
+│   ├── factory_reset.yml            # Reset all routers to clean state
+│   ├── backup_config.yml            # Backup router configurations
+│   ├── README-OSPF.md               # OSPF playbook documentation
+│   ├── README-LDP.md                # LDP playbook documentation
+│   ├── README-L3VPN.md              # L3VPN/VRF playbook documentation
+│   ├── README-VPNV4-BGP.md          # VPNv4 BGP playbook documentation
+│   ├── README-PE-CE-BGP.md          # PE-CE BGP playbook documentation
+│   ├── PLAYBOOKS-README.md          # Overview of all playbooks
+│   ├── host_vars/                   # Per-router configuration
+│   ├── group_vars/                  # Common VyOS settings
+│   ├── templates/                   # Jinja2 templates for configs
+│   ├── verification/                # Verification and testing playbooks
+│   └── archive/                     # Deprecated/old playbooks
+└── backups/                         # Router config backups (gitignored)
 ```
 
 ## How Ansible Works in This Environment

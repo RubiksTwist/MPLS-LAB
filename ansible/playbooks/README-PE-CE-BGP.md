@@ -4,6 +4,8 @@
 
 This playbook configures the final piece of the MPLS L3VPN setup: eBGP peering between Provider Edge (PE) routers and Customer Edge (CE) routers. This allows customer sites to exchange routes across the MPLS backbone while maintaining VPN isolation through VRF A.
 
+As described in the [reference guide](https://lev-0.com/2024/01/18/mpls-on-vyos-l3vpn/), "The connection between the PE and CE will be a very simple eBGP peering." This completes the end-to-end L3VPN service, enabling customer sites (CE1 and CE2) to communicate across the MPLS provider network.
+
 ## What This Playbook Does
 
 ### Provider Edge Routers (PE1 & PE2)
@@ -352,3 +354,4 @@ After running this playbook, you should have:
 - [RFC 4271 - BGP-4](https://datatracker.ietf.org/doc/html/rfc4271)
 - [VyOS VRF Documentation](https://docs.vyos.io/en/latest/configuration/vrf/index.html)
 - [VyOS BGP Documentation](https://docs.vyos.io/en/latest/configuration/protocols/bgp.html)
+- [MPLS on VyOS – L3VPN Guide](https://lev-0.com/2024/01/18/mpls-on-vyos-l3vpn/) - Reference implementation
