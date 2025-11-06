@@ -1,0 +1,171 @@
+---
+- name: Configure OSPF Network with Dummy Interfaces
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Display configuration banner
+      debug:
+        msg: "Configuring OSPF on {{ inventory_hostname }}"
+
+    - name: Clean PE1 - Remove old interface configurations
+      vyos.vyos.vyos_config:
+        lines:
+          - delete protocols ospf interface eth1
+          - delete protocols ospf interface eth2
+          - delete interfaces ethernet eth1 address
+          - delete interfaces ethernet eth2 address
+          - delete interfaces ethernet eth1 description
+          - delete interfaces ethernet eth2 description
+        save: false
+      when: inventory_hostname == 'PE1'
+      ignore_errors: true
+
+    - name: Configure PE1 - Dummy interface, eth1 (to CE1), and eth2 (to P1)
+      vyos.vyos.vyos_config:
+        lines:
+          - set interfaces dummy dum0 address '10.0.0.1/32'
+          - set interfaces dummy dum0 description 'Loopback for OSPF Router ID'
+          - set interfaces ethernet eth1 description 'Link to CE1 (Customer Edge)'
+          - set interfaces ethernet eth2 address '10.1.2.1/24'
+          - set interfaces ethernet eth2 description 'Link to P1 (Provider Core)'
+          - set protocols ospf interface dum0 area '0'
+          - set protocols ospf interface eth2 area '0'
+          - set protocols ospf interface eth2 network 'point-to-point'
+        save: false
+      when: inventory_hostname == 'PE1'
+
+    - name: Clean P1 - Remove old interface configurations
+      vyos.vyos.vyos_config:
+        lines:
+          - delete protocols ospf interface eth1
+          - delete protocols ospf interface eth2
+          - delete interfaces ethernet eth1 address
+          - delete interfaces ethernet eth2 address
+          - delete interfaces ethernet eth1 description
+          - delete interfaces ethernet eth2 description
+        save: false
+      when: inventory_hostname == 'P1'
+      ignore_errors: true
+
+    - name: Configure P1 - Dummy interface, eth1, and eth2
+      vyos.vyos.vyos_config:
+        lines:
+          - set interfaces dummy dum0 address '10.0.0.2/32'
+          - set interfaces dummy dum0 description 'Loopback for OSPF Router ID'
+          - set interfaces ethernet eth1 address '10.1.2.2/24'
+          - set interfaces ethernet eth1 description 'Link to PE1 (Provider Edge)'
+          - set interfaces ethernet eth2 address '10.2.3.2/24'
+          - set interfaces ethernet eth2 description 'Link to P2 (Provider Core)'
+          - set protocols ospf interface dum0 area '0'
+          - set protocols ospf interface eth1 area '0'
+          - set protocols ospf interface eth2 area '0'
+          - set protocols ospf interface eth1 network 'point-to-point'
+          - set protocols ospf interface eth2 network 'point-to-point'
+        save: false
+      when: inventory_hostname == 'P1'
+
+    - name: Clean P2 - Remove old interface configurations
+      vyos.vyos.vyos_config:
+        lines:
+          - delete protocols ospf interface eth1
+          - delete protocols ospf interface eth2
+          - delete interfaces ethernet eth1 address
+          - delete interfaces ethernet eth2 address
+          - delete interfaces ethernet eth1 description
+          - delete interfaces ethernet eth2 description
+        save: false
+      when: inventory_hostname == 'P2'
+      ignore_errors: true
+
+    - name: Configure P2 - Dummy interface, eth1, and eth2
+      vyos.vyos.vyos_config:
+        lines:
+          - set interfaces dummy dum0 address '10.0.0.3/32'
+          - set interfaces dummy dum0 description 'Loopback for OSPF Router ID'
+          - set interfaces ethernet eth1 address '10.2.3.3/24'
+          - set interfaces ethernet eth1 description 'Link to P1 (Provider Core)'
+          - set interfaces ethernet eth2 address '10.3.4.3/24'
+          - set interfaces ethernet eth2 description 'Link to PE2 (Provider Edge)'
+          - set protocols ospf interface dum0 area '0'
+          - set protocols ospf interface eth1 area '0'
+          - set protocols ospf interface eth2 area '0'
+          - set protocols ospf interface eth1 network 'point-to-point'
+          - set protocols ospf interface eth2 network 'point-to-point'
+        save: false
+      when: inventory_hostname == 'P2'
+
+    - name: Clean PE2 - Remove old interface configurations
+      vyos.vyos.vyos_config:
+        lines:
+          - delete protocols ospf interface eth1
+          - delete protocols ospf interface eth2
+          - delete interfaces ethernet eth1 address
+          - delete interfaces ethernet eth2 address
+          - delete interfaces ethernet eth1 description
+          - delete interfaces ethernet eth2 description
+        save: false
+      when: inventory_hostname == 'PE2'
+      ignore_errors: true
+
+    - name: Configure PE2 - Dummy interface, eth1 (to P2), and eth2 (reserved for CE2)
+      vyos.vyos.vyos_config:
+        lines:
+          - set interfaces dummy dum0 address '10.0.0.4/32'
+          - set interfaces dummy dum0 description 'Loopback for OSPF Router ID'
+          - set interfaces ethernet eth1 address '10.3.4.4/24'
+          - set interfaces ethernet eth1 description 'Link to P2 (Provider Core)'
+          - set interfaces ethernet eth2 description 'Link to CE2 (Customer Edge)'
+          - set protocols ospf interface dum0 area '0'
+          - set protocols ospf interface eth1 area '0'
+          - set protocols ospf interface eth1 network 'point-to-point'
+        save: false
+      when: inventory_hostname == 'PE2'
+
+    - name: Commit and save configuration
+      vyos.vyos.vyos_config:
+        save: true
+
+    - name: Wait for OSPF to stabilize
+      pause:
+        seconds: 10
+      run_once: true
+
+- name: Verify OSPF Configuration
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Check OSPF neighbors
+      vyos.vyos.vyos_command:
+        commands:
+          - show ip ospf neighbor
+      register: ospf_neighbors
+      when: inventory_hostname in ['P1', 'P2', 'PE1', 'PE2']
+
+    - name: Display OSPF neighbors
+      debug:
+        var: ospf_neighbors.stdout_lines[0]
+      when: inventory_hostname in ['P1', 'P2', 'PE1', 'PE2']
+
+    - name: Check OSPF interfaces
+      vyos.vyos.vyos_command:
+        commands:
+          - show ip ospf interface
+      register: ospf_interfaces
+      when: inventory_hostname in ['P1', 'P2', 'PE1', 'PE2']
+
+    - name: Display OSPF interfaces
+      debug:
+        var: ospf_interfaces.stdout_lines[0]
+      when: inventory_hostname in ['P1', 'P2', 'PE1', 'PE2']
+
+    - name: Check IP routes
+      vyos.vyos.vyos_command:
+        commands:
+          - show ip route ospf
+      register: ospf_routes
+      when: inventory_hostname in ['P1', 'P2', 'PE1', 'PE2']
+
+    - name: Display OSPF routes
+      debug:
+        var: ospf_routes.stdout_lines[0]
+      when: inventory_hostname in ['P1', 'P2', 'PE1', 'PE2']

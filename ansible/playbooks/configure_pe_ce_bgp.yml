@@ -1,0 +1,154 @@
+---
+- name: Configure PE to CE eBGP Peering
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Display configuration banner
+      debug:
+        msg: "Configuring PE-CE eBGP on {{ inventory_hostname }}"
+
+    # PE1 Configuration
+    - name: Configure PE1 - Interface eth1 in VRF A and eBGP to CE1
+      vyos.vyos.vyos_config:
+        lines:
+          - set interfaces ethernet eth1 address '172.16.0.1/30'
+          - set interfaces ethernet eth1 description 'Link to CE1 (Customer Edge)'
+          - set interfaces ethernet eth1 vrf 'A'
+          - set vrf name A protocols bgp address-family ipv4-unicast network 172.16.0.0/30
+          - set vrf name A protocols bgp neighbor 172.16.0.2 address-family ipv4-unicast
+          - set vrf name A protocols bgp neighbor 172.16.0.2 remote-as '65001'
+        save: false
+      when: inventory_hostname == 'PE1'
+
+    # PE2 Configuration
+    - name: Configure PE2 - Interface eth2 in VRF A and eBGP to CE2
+      vyos.vyos.vyos_config:
+        lines:
+          - set interfaces ethernet eth2 address '172.16.0.5/30'
+          - set interfaces ethernet eth2 description 'Link to CE2 (Customer Edge)'
+          - set interfaces ethernet eth2 vrf 'A'
+          - set vrf name A protocols bgp address-family ipv4-unicast network 172.16.0.4/30
+          - set vrf name A protocols bgp neighbor 172.16.0.6 address-family ipv4-unicast
+          - set vrf name A protocols bgp neighbor 172.16.0.6 remote-as '65002'
+        save: false
+      when: inventory_hostname == 'PE2'
+
+    # CE1 Configuration
+    - name: Configure CE1 - Interfaces and eBGP to PE1
+      vyos.vyos.vyos_config:
+        lines:
+          - set interfaces dummy dum0 address '10.0.1.1/24'
+          - set interfaces dummy dum0 description 'Customer Network A - Site 1'
+          - set interfaces ethernet eth1 address '172.16.0.2/30'
+          - set interfaces ethernet eth1 description 'Link to PE1 (Provider Edge)'
+          - set protocols bgp address-family ipv4-unicast redistribute connected
+          - set protocols bgp neighbor 172.16.0.1 address-family ipv4-unicast
+          - set protocols bgp neighbor 172.16.0.1 remote-as '65000'
+          - set protocols bgp system-as '65001'
+        save: false
+      when: inventory_hostname == 'CE1'
+
+    # CE2 Configuration
+    - name: Configure CE2 - Interfaces and eBGP to PE2
+      vyos.vyos.vyos_config:
+        lines:
+          - set interfaces dummy dum0 address '10.0.2.1/24'
+          - set interfaces dummy dum0 description 'Customer Network A - Site 2'
+          - set interfaces ethernet eth1 address '172.16.0.6/30'
+          - set interfaces ethernet eth1 description 'Link to PE2 (Provider Edge)'
+          - set protocols bgp address-family ipv4-unicast redistribute connected
+          - set protocols bgp neighbor 172.16.0.5 address-family ipv4-unicast
+          - set protocols bgp neighbor 172.16.0.5 remote-as '65000'
+          - set protocols bgp system-as '65002'
+        save: false
+      when: inventory_hostname == 'CE2'
+
+    - name: Commit and save configuration
+      vyos.vyos.vyos_config:
+        save: true
+
+    - name: Wait for BGP sessions to establish
+      pause:
+        seconds: 20
+      run_once: true
+
+- name: Verify PE-CE BGP Configuration
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Check BGP summary on PE routers
+      vyos.vyos.vyos_command:
+        commands:
+          - show bgp vrf A summary
+      register: pe_bgp_summary
+      when: inventory_hostname in ['PE1', 'PE2']
+
+    - name: Display PE BGP summary
+      debug:
+        var: pe_bgp_summary.stdout_lines[0]
+      when: inventory_hostname in ['PE1', 'PE2']
+
+    - name: Check BGP summary on CE routers
+      vyos.vyos.vyos_command:
+        commands:
+          - show bgp summary
+      register: ce_bgp_summary
+      when: inventory_hostname in ['CE1', 'CE2']
+
+    - name: Display CE BGP summary
+      debug:
+        var: ce_bgp_summary.stdout_lines[0]
+      when: inventory_hostname in ['CE1', 'CE2']
+
+    - name: Check BGP routes on CE routers
+      vyos.vyos.vyos_command:
+        commands:
+          - show ip bgp
+      register: ce_bgp_routes
+      when: inventory_hostname in ['CE1', 'CE2']
+
+    - name: Display CE BGP routes
+      debug:
+        var: ce_bgp_routes.stdout_lines[0]
+      when: inventory_hostname in ['CE1', 'CE2']
+
+    - name: Check VRF routes on PE routers
+      vyos.vyos.vyos_command:
+        commands:
+          - show ip route vrf A
+      register: pe_vrf_routes
+      when: inventory_hostname in ['PE1', 'PE2']
+
+    - name: Display PE VRF routes
+      debug:
+        var: pe_vrf_routes.stdout_lines[0]
+      when: inventory_hostname in ['PE1', 'PE2']
+
+- name: End-to-End Connectivity Test
+  hosts: CE1
+  gather_facts: false
+  tasks:
+    - name: Test ping from CE1 to CE2 (10.0.2.1)
+      vyos.vyos.vyos_command:
+        commands:
+          - ping 10.0.2.1 source-address 10.0.1.1 count 5
+      register: ping_result
+      ignore_errors: true
+
+    - name: Display ping results
+      debug:
+        msg: |
+          ========================================
+          End-to-End Connectivity Test
+          ========================================
+          Source: CE1 (10.0.1.1)
+          Destination: CE2 (10.0.2.1)
+          ========================================
+          {{ ping_result.stdout_lines[0] | join('\n') }}
+          ========================================
+      when: ping_result is succeeded
+
+    - name: Connectivity test failed
+      debug:
+        msg: "WARNING: Ping from CE1 to CE2 failed. Check BGP peering and route advertisement."
+      when: ping_result is failed

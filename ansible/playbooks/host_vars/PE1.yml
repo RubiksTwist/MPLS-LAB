@@ -3,10 +3,6 @@
 router_config:
   router_id: "10.0.0.1"
   interfaces:
-    loopback:
-      lo:
-        description: "Loopback for MPLS"
-        address: "10.0.0.1/32"
     ethernet:
       eth0:
         description: "Management Interface"
@@ -18,6 +14,10 @@ router_config:
       eth2:
         description: "To P1"
         address: "10.1.2.1/24"
+    dummy:
+      dum0:
+        description: "Loopback for MPLS"
+        address: "10.0.0.1/32"
   vrf:
     A:
       table: 101
@@ -37,7 +37,7 @@ router_config:
   protocols:
     ospf:
       interfaces:
-        lo:
+        dum0:
           area: "0"
         eth2:
           area: "0"
@@ -47,7 +47,7 @@ router_config:
       neighbors:
         "10.0.0.4":
           remote_as: "65000"
-          update_source: "lo"
+          update_source: "dum0"
           address_family:
             - "ipv4-vpn"
     mpls:

@@ -1,0 +1,74 @@
+---
+# Factory Reset Playbook - Wipe all configurations except management interface and SSH
+# This allows you to start fresh with manual configuration
+- name: Factory Reset Routers (Keep Management Interface Only)
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Display reset warning
+      debug:
+        msg: "⚠️  Resetting {{ inventory_hostname }} - Removing all protocols, VRFs, interfaces (except mgmt), and routing"
+
+    - name: Remove VRF assignments from interfaces (must be done before deleting VRFs)
+      vyos.vyos.vyos_config:
+        lines:
+          - delete interfaces ethernet eth1 vrf
+          - delete interfaces ethernet eth2 vrf
+          - delete interfaces ethernet eth3 vrf
+        save: false
+      ignore_errors: true
+
+    - name: Delete all VRFs
+      vyos.vyos.vyos_config:
+        lines:
+          - delete vrf
+        save: false
+      ignore_errors: true
+
+    - name: Delete all routing protocols
+      vyos.vyos.vyos_config:
+        lines:
+          - delete protocols ospf
+          - delete protocols bgp
+          - delete protocols mpls
+          - delete protocols static route
+        save: false
+      ignore_errors: true
+
+    - name: Delete all non-management interfaces (keep eth0)
+      vyos.vyos.vyos_config:
+        lines:
+          - delete interfaces ethernet eth1
+          - delete interfaces ethernet eth2
+          - delete interfaces ethernet eth3
+          - delete interfaces loopback lo address 10.0.0.1/32
+          - delete interfaces loopback lo address 10.0.0.2/32
+          - delete interfaces loopback lo address 10.0.0.3/32
+          - delete interfaces loopback lo address 10.0.0.4/32
+          - delete interfaces loopback lo address 10.0.1.1/24
+          - delete interfaces loopback lo address 10.0.2.1/24
+          - delete interfaces loopback lo description
+          - delete interfaces dummy
+        save: false
+      ignore_errors: true
+
+    - name: Commit configuration changes
+      vyos.vyos.vyos_config:
+        save: true
+
+    - name: Display completion message
+      debug:
+        msg: "✅ {{ inventory_hostname }} reset complete - Management interface (eth0) and SSH retained"
+
+- name: Verify Reset State
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Show remaining interfaces
+      vyos.vyos.vyos_command:
+        commands:
+          - show interfaces
+
+    - name: Display interface summary
+      debug:
+        var: ansible_facts

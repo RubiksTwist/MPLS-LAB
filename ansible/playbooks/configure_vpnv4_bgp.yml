@@ -1,0 +1,80 @@
+---
+- name: Configure VPNv4 iBGP between Provider Edge Routers
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Display configuration banner
+      debug:
+        msg: "Configuring VPNv4 iBGP on {{ inventory_hostname }}"
+
+    - name: Configure PE1 - VPNv4 iBGP to PE2
+      vyos.vyos.vyos_config:
+        lines:
+          - set protocols bgp parameters router-id '10.0.0.1'
+          - set protocols bgp address-family ipv4-vpn
+          - set protocols bgp neighbor 10.0.0.4 address-family ipv4-vpn
+          - set protocols bgp neighbor 10.0.0.4 remote-as '65000'
+          - set protocols bgp neighbor 10.0.0.4 update-source 'dum0'
+        save: false
+      when: inventory_hostname == 'PE1'
+
+    - name: Configure PE2 - VPNv4 iBGP to PE1
+      vyos.vyos.vyos_config:
+        lines:
+          - set protocols bgp parameters router-id '10.0.0.4'
+          - set protocols bgp address-family ipv4-vpn
+          - set protocols bgp neighbor 10.0.0.1 address-family ipv4-vpn
+          - set protocols bgp neighbor 10.0.0.1 remote-as '65000'
+          - set protocols bgp neighbor 10.0.0.1 update-source 'dum0'
+        save: false
+      when: inventory_hostname == 'PE2'
+
+    - name: Commit and save configuration
+      vyos.vyos.vyos_config:
+        save: true
+
+    - name: Wait for BGP sessions to establish
+      pause:
+        seconds: 15
+      run_once: true
+
+- name: Verify VPNv4 BGP Configuration
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Check BGP summary
+      vyos.vyos.vyos_command:
+        commands:
+          - show bgp summary
+      register: bgp_summary
+      when: inventory_hostname in ['PE1', 'PE2']
+
+    - name: Display BGP summary
+      debug:
+        var: bgp_summary.stdout_lines[0]
+      when: inventory_hostname in ['PE1', 'PE2']
+
+    - name: Check VPNv4 BGP neighbors
+      vyos.vyos.vyos_command:
+        commands:
+          - show bgp ipv4 vpn summary
+      register: vpnv4_summary
+      when: inventory_hostname in ['PE1', 'PE2']
+
+    - name: Display VPNv4 BGP neighbors
+      debug:
+        var: vpnv4_summary.stdout_lines[0]
+      when: inventory_hostname in ['PE1', 'PE2']
+
+    - name: Check VPNv4 routes
+      vyos.vyos.vyos_command:
+        commands:
+          - show bgp ipv4 vpn
+      register: vpnv4_routes
+      when: inventory_hostname in ['PE1', 'PE2']
+      ignore_errors: true
+
+    - name: Display VPNv4 routes
+      debug:
+        var: vpnv4_routes.stdout_lines[0]
+      when: inventory_hostname in ['PE1', 'PE2'] and vpnv4_routes is succeeded

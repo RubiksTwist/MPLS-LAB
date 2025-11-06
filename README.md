@@ -4,12 +4,26 @@ Ansible-managed MPLS network lab with VyOS routers running in EVE-NG.
 
 ## Network Topology
 
+### Routers
 - **CE1** (192.168.100.11) - Customer Edge 1
 - **PE1** (192.168.100.12) - Provider Edge 1
 - **P1** (192.168.100.13) - Provider Core 1
 - **P2** (192.168.100.14) - Provider Core 2
 - **PE2** (192.168.100.15) - Provider Edge 2
 - **CE2** (192.168.100.16) - Customer Edge 2
+
+### Physical Connections
+```
+CE1 eth1 <---> eth1 PE1 eth2 <---> eth1 P1 eth2 <---> eth1 P2 eth2 <---> eth1 PE2 eth2 <---> eth1 CE2
+```
+
+**Note**: All routers have eth0 reserved for management (192.168.100.x/24)
+
+### OSPF Network (Area 0)
+- **PE1**: Loopback 10.0.0.1/32, eth2 (10.1.2.1/24) connects to P1
+- **P1**: Loopback 10.0.0.2/32, eth1 (10.1.2.2/24) connects to PE1, eth2 (10.2.3.2/24) connects to P2
+- **P2**: Loopback 10.0.0.3/32, eth1 (10.2.3.3/24) connects to P1, eth2 (10.3.4.3/24) connects to PE2
+- **PE2**: Loopback 10.0.0.4/32, eth1 (10.3.4.4/24) connects to P2
 
 ## Quick Start
 

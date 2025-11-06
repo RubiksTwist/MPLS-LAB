@@ -1,0 +1,133 @@
+---
+- name: Configure MPLS LDP on Provider Network
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Display configuration banner
+      debug:
+        msg: "Configuring MPLS LDP on {{ inventory_hostname }}"
+
+    - name: Clean PE1 - Remove old MPLS/LDP configurations
+      vyos.vyos.vyos_config:
+        lines:
+          - delete protocols mpls
+        save: false
+      when: inventory_hostname == 'PE1'
+      ignore_errors: true
+
+    - name: Configure PE1 - MPLS LDP on eth2 (to P1)
+      vyos.vyos.vyos_config:
+        lines:
+          - set protocols mpls interface 'eth2'
+          - set protocols mpls ldp discovery transport-ipv4-address '10.0.0.1'
+          - set protocols mpls ldp interface 'eth2'
+          - set protocols mpls ldp router-id '10.0.0.1'
+        save: false
+      when: inventory_hostname == 'PE1'
+
+    - name: Clean P1 - Remove old MPLS/LDP configurations
+      vyos.vyos.vyos_config:
+        lines:
+          - delete protocols mpls
+        save: false
+      when: inventory_hostname == 'P1'
+      ignore_errors: true
+
+    - name: Configure P1 - MPLS LDP on eth1 (to PE1) and eth2 (to P2)
+      vyos.vyos.vyos_config:
+        lines:
+          - set protocols mpls interface 'eth1'
+          - set protocols mpls interface 'eth2'
+          - set protocols mpls ldp discovery transport-ipv4-address '10.0.0.2'
+          - set protocols mpls ldp interface 'eth1'
+          - set protocols mpls ldp interface 'eth2'
+          - set protocols mpls ldp router-id '10.0.0.2'
+        save: false
+      when: inventory_hostname == 'P1'
+
+    - name: Clean P2 - Remove old MPLS/LDP configurations
+      vyos.vyos.vyos_config:
+        lines:
+          - delete protocols mpls
+        save: false
+      when: inventory_hostname == 'P2'
+      ignore_errors: true
+
+    - name: Configure P2 - MPLS LDP on eth1 (to P1) and eth2 (to PE2)
+      vyos.vyos.vyos_config:
+        lines:
+          - set protocols mpls interface 'eth1'
+          - set protocols mpls interface 'eth2'
+          - set protocols mpls ldp discovery transport-ipv4-address '10.0.0.3'
+          - set protocols mpls ldp interface 'eth1'
+          - set protocols mpls ldp interface 'eth2'
+          - set protocols mpls ldp router-id '10.0.0.3'
+        save: false
+      when: inventory_hostname == 'P2'
+
+    - name: Clean PE2 - Remove old MPLS/LDP configurations
+      vyos.vyos.vyos_config:
+        lines:
+          - delete protocols mpls
+        save: false
+      when: inventory_hostname == 'PE2'
+      ignore_errors: true
+
+    - name: Configure PE2 - MPLS LDP on eth1 (to P2)
+      vyos.vyos.vyos_config:
+        lines:
+          - set protocols mpls interface 'eth1'
+          - set protocols mpls ldp discovery transport-ipv4-address '10.0.0.4'
+          - set protocols mpls ldp interface 'eth1'
+          - set protocols mpls ldp router-id '10.0.0.4'
+        save: false
+      when: inventory_hostname == 'PE2'
+
+    - name: Commit and save configuration
+      vyos.vyos.vyos_config:
+        save: true
+
+    - name: Wait for LDP to stabilize
+      pause:
+        seconds: 15
+      run_once: true
+
+- name: Verify MPLS LDP Configuration
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Check LDP neighbors
+      vyos.vyos.vyos_command:
+        commands:
+          - show mpls ldp neighbor
+      register: ldp_neighbors
+      when: inventory_hostname in ['P1', 'P2', 'PE1', 'PE2']
+
+    - name: Display LDP neighbors
+      debug:
+        var: ldp_neighbors.stdout_lines[0]
+      when: inventory_hostname in ['P1', 'P2', 'PE1', 'PE2']
+
+    - name: Check LDP bindings
+      vyos.vyos.vyos_command:
+        commands:
+          - show mpls ldp binding
+      register: ldp_bindings
+      when: inventory_hostname in ['P1', 'P2', 'PE1', 'PE2']
+
+    - name: Display LDP bindings
+      debug:
+        var: ldp_bindings.stdout_lines[0]
+      when: inventory_hostname in ['P1', 'P2', 'PE1', 'PE2']
+
+    - name: Check MPLS LDP interfaces
+      vyos.vyos.vyos_command:
+        commands:
+          - show mpls ldp interface
+      register: mpls_interfaces
+      when: inventory_hostname in ['P1', 'P2', 'PE1', 'PE2']
+
+    - name: Display MPLS LDP interfaces
+      debug:
+        var: mpls_interfaces.stdout_lines[0]
+      when: inventory_hostname in ['P1', 'P2', 'PE1', 'PE2']

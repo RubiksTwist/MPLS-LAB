@@ -1,0 +1,101 @@
+---
+- name: Configure L3VPN (VRF) on Provider Edge Routers
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Display configuration banner
+      debug:
+        msg: "Configuring L3VPN VRF on {{ inventory_hostname }}"
+
+    - name: Clean PE1 - Remove old VRF configurations
+      vyos.vyos.vyos_config:
+        lines:
+          - delete vrf name A
+        save: false
+      when: inventory_hostname == 'PE1'
+      ignore_errors: true
+
+    - name: Configure PE1 - VRF A for L3VPN
+      vyos.vyos.vyos_config:
+        lines:
+          - set vrf name A table '101'
+          - set vrf name A protocols bgp address-family ipv4-unicast export vpn
+          - set vrf name A protocols bgp address-family ipv4-unicast import vpn
+          - set vrf name A protocols bgp address-family ipv4-unicast label vpn export 'auto'
+          - set vrf name A protocols bgp address-family ipv4-unicast rd vpn export '65000:1'
+          - set vrf name A protocols bgp address-family ipv4-unicast route-target vpn both '65000:1'
+          - set vrf name A protocols bgp system-as '65000'
+        save: false
+      when: inventory_hostname == 'PE1'
+
+    - name: Clean PE2 - Remove old VRF configurations
+      vyos.vyos.vyos_config:
+        lines:
+          - delete vrf name A
+        save: false
+      when: inventory_hostname == 'PE2'
+      ignore_errors: true
+
+    - name: Configure PE2 - VRF A for L3VPN
+      vyos.vyos.vyos_config:
+        lines:
+          - set vrf name A table '101'
+          - set vrf name A protocols bgp address-family ipv4-unicast export vpn
+          - set vrf name A protocols bgp address-family ipv4-unicast import vpn
+          - set vrf name A protocols bgp address-family ipv4-unicast label vpn export 'auto'
+          - set vrf name A protocols bgp address-family ipv4-unicast rd vpn export '65000:1'
+          - set vrf name A protocols bgp address-family ipv4-unicast route-target vpn both '65000:1'
+          - set vrf name A protocols bgp system-as '65000'
+        save: false
+      when: inventory_hostname == 'PE2'
+
+    - name: Commit and save configuration
+      vyos.vyos.vyos_config:
+        save: true
+
+    - name: Wait for VRF configuration to stabilize
+      pause:
+        seconds: 5
+      run_once: true
+
+- name: Verify L3VPN Configuration
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Check VRF configuration
+      vyos.vyos.vyos_command:
+        commands:
+          - show vrf
+      register: vrf_output
+      when: inventory_hostname in ['PE1', 'PE2']
+
+    - name: Display VRF configuration
+      debug:
+        var: vrf_output.stdout_lines[0]
+      when: inventory_hostname in ['PE1', 'PE2']
+
+    - name: Check VRF routing table
+      vyos.vyos.vyos_command:
+        commands:
+          - show ip route vrf A
+      register: vrf_routes
+      when: inventory_hostname in ['PE1', 'PE2']
+      ignore_errors: true
+
+    - name: Display VRF routing table
+      debug:
+        var: vrf_routes.stdout_lines[0]
+      when: inventory_hostname in ['PE1', 'PE2'] and vrf_routes is succeeded
+
+    - name: Check BGP VRF configuration
+      vyos.vyos.vyos_command:
+        commands:
+          - show bgp vrf A summary
+      register: bgp_vrf_summary
+      when: inventory_hostname in ['PE1', 'PE2']
+      ignore_errors: true
+
+    - name: Display BGP VRF summary
+      debug:
+        var: bgp_vrf_summary.stdout_lines[0]
+      when: inventory_hostname in ['PE1', 'PE2'] and bgp_vrf_summary is succeeded

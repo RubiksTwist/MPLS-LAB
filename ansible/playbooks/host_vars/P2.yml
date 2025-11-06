@@ -3,8 +3,8 @@
 router_config:
   router_id: "10.0.0.3"
   interfaces:
-    loopback:
-      lo:
+    dummy:
+      dum0:
         description: "Loopback for MPLS"
         address: "10.0.0.3/32"
     ethernet:
@@ -20,7 +20,7 @@ router_config:
   protocols:
     ospf:
       interfaces:
-        lo:
+        dum0:
           area: "0"
         eth1:
           area: "0"
