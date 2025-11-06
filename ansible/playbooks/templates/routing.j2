@@ -1,16 +1,137 @@
-{# Routing Configuration Template #}
-{% if router_config.protocols is defined %}
-{# OSPF Configuration #}
-{% if router_config.protocols.ospf is defined %}
-{% for area, area_config in router_config.protocols.ospf.area.items() %}
-{% if area_config.network is string %}
-set protocols ospf area {{ area }} network '{{ area_config.network }}'
+{# Routing Configuration Template - Based on working L3VPN example #}
+
+{# VRF Configuration #}
+{% if router_config.vrf is defined %}
+{% for vrf_name, vrf_config in router_config.vrf.items() %}
+{# Create VRF with table #}
+set vrf name {{ vrf_name }} table '{{ vrf_config.table }}'
+
+{# VRF BGP Configuration #}
+{% if vrf_config.bgp is defined %}
+set vrf name {{ vrf_name }} protocols bgp system-as '{{ vrf_config.bgp.asn }}'
+
+{# VPN Export/Import - CRITICAL #}
+{% if vrf_config.export_vpn is defined and vrf_config.export_vpn %}
+set vrf name {{ vrf_name }} protocols bgp address-family ipv4-unicast export vpn
+{% endif %}
+{% if vrf_config.import_vpn is defined and vrf_config.import_vpn %}
+set vrf name {{ vrf_name }} protocols bgp address-family ipv4-unicast import vpn
+{% endif %}
+
+{# VPN Label Allocation #}
+{% if vrf_config.label_vpn_export is defined %}
+set vrf name {{ vrf_name }} protocols bgp address-family ipv4-unicast label vpn export '{{ vrf_config.label_vpn_export }}'
+{% endif %}
+
+{# Route Distinguisher #}
+{% if vrf_config.rd is defined %}
+set vrf name {{ vrf_name }} protocols bgp address-family ipv4-unicast rd vpn export '{{ vrf_config.rd }}'
+{% endif %}
+
+{# Route Targets #}
+{% if vrf_config.rt_both is defined %}
+set vrf name {{ vrf_name }} protocols bgp address-family ipv4-unicast route-target vpn both '{{ vrf_config.rt_both }}'
 {% else %}
-{% for network in area_config.network %}
-set protocols ospf area {{ area }} network '{{ network }}'
+{% if vrf_config.rt_export is defined %}
+set vrf name {{ vrf_name }} protocols bgp address-family ipv4-unicast route-target vpn export '{{ vrf_config.rt_export }}'
+{% endif %}
+{% if vrf_config.rt_import is defined %}
+set vrf name {{ vrf_name }} protocols bgp address-family ipv4-unicast route-target vpn import '{{ vrf_config.rt_import }}'
+{% endif %}
+{% endif %}
+
+{# VRF BGP Networks #}
+{% if vrf_config.bgp.networks is defined %}
+{% for network in vrf_config.bgp.networks %}
+set vrf name {{ vrf_name }} protocols bgp address-family ipv4-unicast network '{{ network }}'
 {% endfor %}
 {% endif %}
+
+{# VRF BGP Neighbors #}
+{% if vrf_config.bgp.neighbors is defined %}
+{% for neighbor_ip, neighbor_config in vrf_config.bgp.neighbors.items() %}
+set vrf name {{ vrf_name }} protocols bgp neighbor '{{ neighbor_ip }}' remote-as '{{ neighbor_config.remote_as }}'
+set vrf name {{ vrf_name }} protocols bgp neighbor '{{ neighbor_ip }}' address-family ipv4-unicast
+{% if neighbor_config.description is defined %}
+set vrf name {{ vrf_name }} protocols bgp neighbor '{{ neighbor_ip }}' description '{{ neighbor_config.description }}'
+{% endif %}
 {% endfor %}
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if router_config.protocols is defined %}
+{# OSPF Configuration - Interface-based like the example #}
+{% if router_config.protocols.ospf is defined %}
+set protocols ospf parameters router-id '{{ router_config.router_id }}'
+{% if router_config.protocols.ospf.interfaces is defined %}
+{% for interface, interface_config in router_config.protocols.ospf.interfaces.items() %}
+set protocols ospf interface {{ interface }} area '{{ interface_config.area }}'
+{% if interface_config.network_type is defined %}
+set protocols ospf interface {{ interface }} network '{{ interface_config.network_type }}'
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endif %}
+
+{# BGP Configuration #}
+{% if router_config.protocols.bgp is defined %}
+set protocols bgp system-as '{{ router_config.protocols.bgp.asn }}'
+set protocols bgp parameters router-id '{{ router_config.router_id }}'
+
+{# Enable IPv4-VPN address family globally #}
+set protocols bgp address-family ipv4-vpn
+
+{# Global BGP Networks #}
+{% if router_config.protocols.bgp.address_family is defined and router_config.protocols.bgp.address_family.ipv4_unicast is defined %}
+{% if router_config.protocols.bgp.address_family.ipv4_unicast.networks is defined %}
+{% for network in router_config.protocols.bgp.address_family.ipv4_unicast.networks %}
+set protocols bgp address-family ipv4-unicast network '{{ network }}'
+{% endfor %}
+{% endif %}
+{% endif %}
+
+{% if router_config.protocols.bgp.neighbors is defined %}
+{% for neighbor_ip, neighbor_config in router_config.protocols.bgp.neighbors.items() %}
+set protocols bgp neighbor '{{ neighbor_ip }}' remote-as '{{ neighbor_config.remote_as }}'
+
+{% if neighbor_config.update_source is defined %}
+set protocols bgp neighbor '{{ neighbor_ip }}' update-source '{{ neighbor_config.update_source }}'
+{% endif %}
+
+{% if neighbor_config.address_family is defined %}
+{% for af in neighbor_config.address_family %}
+set protocols bgp neighbor '{{ neighbor_ip }}' address-family {{ af }}
+{% endfor %}
+{% endif %}
+
+{% if neighbor_config.description is defined %}
+set protocols bgp neighbor '{{ neighbor_ip }}' description '{{ neighbor_config.description }}'
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endif %}
+
+{# MPLS Configuration #}
+{% if router_config.protocols.mpls is defined %}
+{% if router_config.protocols.mpls.interfaces is defined %}
+{% for interface in router_config.protocols.mpls.interfaces %}
+set protocols mpls interface '{{ interface }}'
+{% endfor %}
+{% endif %}
+
+{# LDP Configuration #}
+{% if router_config.protocols.mpls.ldp is defined %}
+set protocols mpls ldp router-id '{{ router_config.protocols.mpls.ldp.router_id }}'
+set protocols mpls ldp discovery transport-ipv4-address '{{ router_config.protocols.mpls.ldp.transport_address }}'
+
+{% if router_config.protocols.mpls.ldp.interfaces is defined %}
+{% for ldp_interface in router_config.protocols.mpls.ldp.interfaces %}
+set protocols mpls ldp interface '{{ ldp_interface }}'
+{% endfor %}
+{% endif %}
+{% endif %}
 {% endif %}
 
 {# Static Routes #}

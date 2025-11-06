@@ -41,4 +41,6 @@ vault.yml
 .env
 .env.local
 .env.*.local
+README-SECRETS/
 README-AZURE-KEYVAULT.md
+README-SSH-KEYS.md

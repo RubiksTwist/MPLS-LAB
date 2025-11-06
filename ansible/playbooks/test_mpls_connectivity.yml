@@ -1,0 +1,216 @@
+---
+- name: Test End-to-End Connectivity Through MPLS Core
+  hosts: localhost
+  gather_facts: false
+  vars:
+    test_scenarios:
+      - name: "CE1 to CE2 (10.0.5.2) via MPLS"
+        source: CE1
+        destination: "10.0.5.2"
+        description: "Customer Edge 1 to Customer Edge 2 customer network"
+      - name: "CE2 to CE1 (10.0.1.2) via MPLS"
+        source: CE2
+        destination: "10.0.1.2"
+        description: "Customer Edge 2 to Customer Edge 1 customer network"
+      - name: "CE1 to PE2 (10.0.5.1) via MPLS"
+        source: CE1
+        destination: "10.0.5.1"
+        description: "CE1 to PE2 customer-facing interface"
+      - name: "CE2 to PE1 (10.0.1.1) via MPLS"
+        source: CE2
+        destination: "10.0.1.1"
+        description: "CE2 to PE1 customer-facing interface"
+
+  tasks:
+    - name: Display test banner
+      debug:
+        msg: |
+          ================================================================
+          MPLS End-to-End Connectivity Test
+          ================================================================
+          Testing customer-to-customer connectivity through MPLS core
+          This should NOT use the management network (192.168.100.x)
+          ================================================================
+
+- name: Verify BGP Routes Are Learned
+  hosts: CE1:CE2
+  gather_facts: false
+  tasks:
+    - name: Check BGP routing table
+      vyos.vyos.vyos_command:
+        commands:
+          - show ip bgp
+      register: bgp_routes
+
+    - name: Display BGP routes
+      debug:
+        msg: "{{ bgp_routes.stdout_lines[0] }}"
+
+    - name: Check IP routing table
+      vyos.vyos.vyos_command:
+        commands:
+          - show ip route bgp
+      register: ip_routes
+
+    - name: Display BGP routes in routing table
+      debug:
+        msg: "{{ ip_routes.stdout_lines[0] }}"
+
+- name: Test Connectivity from CE1 to CE2
+  hosts: CE1
+  gather_facts: false
+  tasks:
+    - name: Display test header for CE1
+      debug:
+        msg: |
+          ================================================================
+          Testing from CE1 (10.0.1.2) to CE2 (10.0.5.2)
+          Expected path: CE1 → PE1 → P1 → P2 → PE2 → CE2
+          ================================================================
+
+    - name: Ping CE2 customer network IP from CE1
+      vyos.vyos.vyos_command:
+        commands:
+          - ping 10.0.5.2 count 5
+      register: ce1_to_ce2_ping
+      ignore_errors: true
+
+    - name: Display CE1 to CE2 ping results
+      debug:
+        msg: "{{ ce1_to_ce2_ping.stdout_lines[0] }}"
+      when: ce1_to_ce2_ping is succeeded
+
+    - name: Ping PE2 customer-facing interface from CE1
+      vyos.vyos.vyos_command:
+        commands:
+          - ping 10.0.5.1 count 5
+      register: ce1_to_pe2_ping
+      ignore_errors: true
+
+    - name: Display CE1 to PE2 interface ping results
+      debug:
+        msg: "{{ ce1_to_pe2_ping.stdout_lines[0] }}"
+      when: ce1_to_pe2_ping is succeeded
+
+    - name: Traceroute from CE1 to CE2
+      vyos.vyos.vyos_command:
+        commands:
+          - traceroute 10.0.5.2
+      register: ce1_to_ce2_traceroute
+      ignore_errors: true
+
+    - name: Display traceroute results
+      debug:
+        msg: "{{ ce1_to_ce2_traceroute.stdout_lines[0] }}"
+      when: ce1_to_ce2_traceroute is succeeded
+
+- name: Test Connectivity from CE2 to CE1
+  hosts: CE2
+  gather_facts: false
+  tasks:
+    - name: Display test header for CE2
+      debug:
+        msg: |
+          ================================================================
+          Testing from CE2 (10.0.5.2) to CE1 (10.0.1.2)
+          Expected path: CE2 → PE2 → P2 → P1 → PE1 → CE1
+          ================================================================
+
+    - name: Ping CE1 customer network IP from CE2
+      vyos.vyos.vyos_command:
+        commands:
+          - ping 10.0.1.2 count 5
+      register: ce2_to_ce1_ping
+      ignore_errors: true
+
+    - name: Display CE2 to CE1 ping results
+      debug:
+        msg: "{{ ce2_to_ce1_ping.stdout_lines[0] }}"
+      when: ce2_to_ce1_ping is succeeded
+
+    - name: Ping PE1 customer-facing interface from CE2
+      vyos.vyos.vyos_command:
+        commands:
+          - ping 10.0.1.1 count 5
+      register: ce2_to_pe1_ping
+      ignore_errors: true
+
+    - name: Display CE2 to PE1 interface ping results
+      debug:
+        msg: "{{ ce2_to_pe1_ping.stdout_lines[0] }}"
+      when: ce2_to_pe1_ping is succeeded
+
+    - name: Traceroute from CE2 to CE1
+      vyos.vyos.vyos_command:
+        commands:
+          - traceroute 10.0.1.2
+      register: ce2_to_ce1_traceroute
+      ignore_errors: true
+
+    - name: Display traceroute results
+      debug:
+        msg: "{{ ce2_to_ce1_traceroute.stdout_lines[0] }}"
+      when: ce2_to_ce1_traceroute is succeeded
+
+- name: Verify MPLS Labels Are Being Used
+  hosts: P1:P2
+  gather_facts: false
+  tasks:
+    - name: Display core router header
+      debug:
+        msg: |
+          ================================================================
+          Checking MPLS forwarding on {{ inventory_hostname }}
+          ================================================================
+
+    - name: Check MPLS forwarding table
+      vyos.vyos.vyos_command:
+        commands:
+          - show mpls forwarding-table
+      register: mpls_fib
+      ignore_errors: true
+
+    - name: Display MPLS forwarding table
+      debug:
+        msg: "{{ mpls_fib.stdout_lines[0] }}"
+      when: mpls_fib is succeeded
+
+    - name: Check LDP bindings
+      vyos.vyos.vyos_command:
+        commands:
+          - show mpls ldp binding
+      register: ldp_bindings
+
+    - name: Display LDP bindings
+      debug:
+        msg: "{{ ldp_bindings.stdout_lines[0] }}"
+
+- name: Summary Report
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Display connectivity summary
+      debug:
+        msg: |
+          ================================================================
+          MPLS Connectivity Test Summary
+          ================================================================
+          
+          ✓ Check the ping results above to verify connectivity
+          ✓ Traceroute should show MPLS core routers in the path
+          ✓ MPLS forwarding tables should show label bindings
+          
+          Expected Results:
+          - CE1 to CE2 ping: Should succeed with ~3-5ms latency
+          - CE2 to CE1 ping: Should succeed with ~3-5ms latency
+          - Traceroute: Should show PE1 → P1/P2 → PE2 path
+          - MPLS labels: Should be assigned and in use
+          
+          If pings fail:
+          1. Verify BGP sessions are established
+          2. Check that routes are being advertised/received
+          3. Verify OSPF is converged in the provider network
+          4. Check LDP neighbors are operational
+          
+          Management network (192.168.100.x) should NOT appear in paths!
+          ================================================================

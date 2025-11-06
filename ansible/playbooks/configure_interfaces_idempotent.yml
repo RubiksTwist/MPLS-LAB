@@ -1,0 +1,86 @@
+---
+# Idempotent Interface Configuration Playbook
+# This playbook ensures interfaces have ONLY the specified IP addresses
+
+- name: Configure Router Interfaces Idempotently
+  hosts: all
+  gather_facts: false
+  
+  tasks:
+    - name: Get current interface configuration
+      vyos.vyos.vyos_command:
+        commands:
+          - show configuration commands | match "interfaces"
+      register: current_interfaces
+      
+    - name: Clear ALL IP addresses from ethernet interfaces (idempotent reset)
+      vyos.vyos.vyos_config:
+        lines:
+          - delete interfaces ethernet {{ item.key }} address
+      loop: "{{ router_config.interfaces.ethernet | dict2items }}"
+      when: router_config.interfaces.ethernet is defined
+      ignore_errors: yes  # OK if no addresses exist
+
+    - name: Clear ALL IP addresses from loopback interface (idempotent reset)
+      vyos.vyos.vyos_config:
+        lines:
+          - delete interfaces loopback lo address
+      when: router_config.interfaces.loopback is defined
+      ignore_errors: yes  # OK if no addresses exist
+
+    - name: Configure ethernet interface descriptions
+      vyos.vyos.vyos_config:
+        lines:
+          - set interfaces ethernet {{ item.key }} description '{{ item.value.description }}'
+      loop: "{{ router_config.interfaces.ethernet | dict2items }}"
+      when: router_config.interfaces.ethernet is defined
+
+    - name: Configure ethernet interface IP addresses (fresh)
+      vyos.vyos.vyos_config:
+        lines:
+          - set interfaces ethernet {{ item.key }} address '{{ item.value.address }}'
+      loop: "{{ router_config.interfaces.ethernet | dict2items }}"
+      when: router_config.interfaces.ethernet is defined
+
+    - name: Configure ethernet interface VRF membership
+      vyos.vyos.vyos_config:
+        lines:
+          - set interfaces ethernet {{ item.key }} vrf '{{ item.value.vrf }}'
+      loop: "{{ router_config.interfaces.ethernet | dict2items }}"
+      when: 
+        - router_config.interfaces.ethernet is defined
+        - item.value.vrf is defined
+
+    - name: Configure loopback interface description
+      vyos.vyos.vyos_config:
+        lines:
+          - set interfaces loopback lo description '{{ router_config.interfaces.loopback.lo.description }}'
+      when: 
+        - router_config.interfaces.loopback is defined
+        - router_config.interfaces.loopback.lo.description is defined
+
+    - name: Configure loopback interface IP address (fresh)
+      vyos.vyos.vyos_config:
+        lines:
+          - set interfaces loopback lo address '{{ router_config.interfaces.loopback.lo.address }}'
+      when: 
+        - router_config.interfaces.loopback is defined
+        - router_config.interfaces.loopback.lo.address is defined
+
+    - name: Commit and save configuration
+      vyos.vyos.vyos_config:
+        save: yes
+
+    - name: Wait for interfaces to stabilize
+      pause:
+        seconds: 5
+
+    - name: Verify interface configuration
+      vyos.vyos.vyos_command:
+        commands:
+          - show interfaces
+      register: interface_status
+
+    - name: Display interface status
+      debug:
+        var: interface_status.stdout_lines[0]

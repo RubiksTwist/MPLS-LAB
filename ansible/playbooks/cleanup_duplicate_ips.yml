@@ -1,0 +1,80 @@
+---
+# Playbook to clean up duplicate IP addresses from previous configurations
+# This should be run BEFORE deploying new configurations to ensure idempotency
+
+- name: Clean Up Duplicate IP Addresses
+  hosts: all
+  gather_facts: no
+  
+  vars:
+    # Map of old IP addresses to remove per router
+    old_ips_to_remove:
+      PE1:
+        loopback:
+          - "10.0.2.2/32"
+        ethernet:
+          eth2:
+            - "10.0.2.2/30"
+      PE2:
+        loopback:
+          - "10.0.4.2/32"
+        ethernet:
+          eth1:
+            - "10.0.4.2/30"
+      P1:
+        loopback:
+          - "10.0.2.1/32"
+        ethernet:
+          eth1:
+            - "10.0.2.1/30"
+          eth2:
+            - "10.0.3.1/30"
+      P2:
+        loopback:
+          - "10.0.4.1/32"
+        ethernet:
+          eth1:
+            - "10.0.3.2/30"
+          eth2:
+            - "10.0.4.1/30"
+      CE1:
+        loopback:
+          - "172.16.1.1/24"
+        ethernet:
+          eth1:
+            - "10.0.1.2/30"
+      CE2:
+        loopback:
+          - "172.16.2.1/24"
+        ethernet:
+          eth1:
+            - "10.0.5.2/30"
+
+  tasks:
+    - name: Remove old loopback IP addresses
+      vyos.vyos.vyos_config:
+        lines: "delete interfaces loopback lo address '{{ item }}'"
+      loop: "{{ old_ips_to_remove[inventory_hostname].loopback | default([]) }}"
+      when: 
+        - inventory_hostname in old_ips_to_remove
+        - old_ips_to_remove[inventory_hostname].loopback is defined
+      ignore_errors: yes  # Continue even if address doesn't exist
+
+    - name: Remove old ethernet interface IP addresses
+      vyos.vyos.vyos_config:
+        lines: "delete interfaces ethernet {{ item.0 }} address '{{ item.1 }}'"
+      with_subelements:
+        - "{{ old_ips_to_remove[inventory_hostname].ethernet | default({}) | dict2items }}"
+        - value
+      when: 
+        - inventory_hostname in old_ips_to_remove
+        - old_ips_to_remove[inventory_hostname].ethernet is defined
+      ignore_errors: yes  # Continue even if address doesn't exist
+
+    - name: Commit and save configuration
+      vyos.vyos.vyos_config:
+        save: yes
+
+    - name: Display cleanup completion
+      debug:
+        msg: "Cleaned up old IP addresses on {{ inventory_hostname }}"

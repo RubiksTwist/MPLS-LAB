@@ -1,27 +1,63 @@
 ---
-# PE1 specific configurations
+# PE1 Provider Edge Router - Based on working L3VPN example
 router_config:
+  router_id: "10.0.0.1"
   interfaces:
+    loopback:
+      lo:
+        description: "Loopback for MPLS"
+        address: "10.0.0.1/32"
     ethernet:
       eth0:
         description: "Management Interface"
         address: "192.168.100.12/24"
       eth1:
         description: "To CE1"
-        address: "10.0.1.1/30"
+        address: "172.16.0.1/30"
+        vrf: "A"
       eth2:
         description: "To P1"
-        address: "10.0.2.2/30"
+        address: "10.1.2.1/24"
+  vrf:
+    A:
+      table: 101
+      rd: "65000:1"
+      rt_both: "65000:1"
+      export_vpn: true
+      import_vpn: true
+      label_vpn_export: "auto"
+      bgp:
+        asn: "65000"
+        neighbors:
+          "172.16.0.2":
+            remote_as: "65001"
+            description: "CE1"
+        networks:
+          - "172.16.0.0/30"
   protocols:
     ospf:
-      area:
-        "0":
-          network:
-            - "10.0.1.0/30"
-            - "10.0.2.0/30"
+      interfaces:
+        lo:
+          area: "0"
+        eth2:
+          area: "0"
+          network_type: "point-to-point"
+    bgp:
+      asn: "65000"
+      neighbors:
+        "10.0.0.4":
+          remote_as: "65000"
+          update_source: "lo"
+          address_family:
+            - "ipv4-vpn"
     mpls:
-      interface:
+      interfaces:
         - "eth2"
+      ldp:
+        router_id: "10.0.0.1"
+        transport_address: "10.0.0.1"
+        interfaces:
+          - "eth2"
     static:
       route:
         "0.0.0.0/0":

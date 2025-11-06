@@ -1,0 +1,89 @@
+---
+# Fully Idempotent MPLS Configuration
+# This playbook uses VyOS load-merge to ensure exact configuration state
+
+- name: Configure MPLS Network - Idempotent Approach
+  hosts: all
+  gather_facts: false
+  
+  vars:
+    # Define what should be cleared for idempotency
+    protocols_to_clear:
+      - ospf
+      - bgp
+      - mpls
+      - static
+    
+  tasks:
+    - name: Display configuration banner
+      debug:
+        msg: "Configuring {{ inventory_hostname }} as {{ 'Provider Core' if inventory_hostname in ['P1', 'P2'] else 'Provider Edge' if inventory_hostname in ['PE1', 'PE2'] else 'Customer Edge' }} router"
+
+    # Approach 1: Delete-then-Set (Current approach - works but disrupts service)
+    - name: Delete existing routing protocols for clean state
+      vyos.vyos.vyos_config:
+        lines:
+          - delete protocols ospf
+          - delete protocols bgp
+          - delete protocols mpls
+          - delete protocols static
+          - delete vrf
+        save: false
+      ignore_errors: true
+      tags: ['delete-set']
+
+    # Approach 2: Generate complete configuration from templates
+    - name: Generate routing configuration from template
+      set_fact:
+        routing_config: "{{ lookup('template', '../templates/routing.j2') }}"
+
+    - name: Generate interface configuration from template
+      set_fact:
+        interface_config: "{{ lookup('template', '../templates/interfaces.j2') }}"
+
+    - name: Apply routing configuration
+      vyos.vyos.vyos_config:
+        lines: "{{ routing_config.split('\n') | select('match', '^set .*') | list }}"
+        save: false
+
+    - name: Apply interface configuration
+      vyos.vyos.vyos_config:
+        lines: "{{ interface_config.split('\n') | select('match', '^set .*') | list }}"
+        save: false
+
+    - name: Commit and save configuration
+      vyos.vyos.vyos_config:
+        save: true
+
+    - name: Wait for protocols to stabilize
+      pause:
+        seconds: 10
+
+    # Verification tasks
+    - name: Verify OSPF neighbors (Provider routers)
+      vyos.vyos.vyos_command:
+        commands:
+          - show ip ospf neighbor
+      register: ospf_neighbors
+      when: inventory_hostname in ['P1', 'P2', 'PE1', 'PE2']
+
+    - name: Verify BGP sessions
+      vyos.vyos.vyos_command:
+        commands:
+          - show ip bgp summary
+      register: bgp_summary
+      when: inventory_hostname in ['CE1', 'CE2', 'PE1', 'PE2']
+
+    - name: Verify LDP neighbors (Provider routers)
+      vyos.vyos.vyos_command:
+        commands:
+          - show mpls ldp neighbor
+      register: ldp_neighbors
+      when: inventory_hostname in ['P1', 'P2', 'PE1', 'PE2']
+
+    - name: Display verification results
+      debug:
+        msg:
+          - "OSPF: {{ ospf_neighbors.stdout_lines[0] | default('N/A') }}"
+          - "BGP: {{ bgp_summary.stdout_lines[0] | default('N/A') }}"
+          - "LDP: {{ ldp_neighbors.stdout_lines[0] | default('N/A') }}"

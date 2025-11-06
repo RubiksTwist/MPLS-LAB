@@ -1,0 +1,112 @@
+---
+- name: Verify MPLS Network Status
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Display router role
+      debug:
+        msg: |
+          ========================================
+          Router: {{ inventory_hostname }}
+          Role: {{ 'Provider Core (P)' if inventory_hostname in ['P1', 'P2'] else 'Provider Edge (PE)' if inventory_hostname in ['PE1', 'PE2'] else 'Customer Edge (CE)' }}
+          ========================================
+
+    - name: Check OSPF status (Provider network)
+      block:
+        - name: Get OSPF neighbor status
+          vyos.vyos.vyos_command:
+            commands:
+              - show ip ospf neighbor
+          register: ospf_neighbors
+
+        - name: Display OSPF neighbors
+          debug:
+            msg: "{{ ospf_neighbors.stdout_lines[0] }}"
+
+        - name: Get OSPF routes
+          vyos.vyos.vyos_command:
+            commands:
+              - show ip route ospf
+          register: ospf_routes
+
+        - name: Display OSPF routes
+          debug:
+            msg: "{{ ospf_routes.stdout_lines[0] }}"
+      when: inventory_hostname in ['P1', 'P2', 'PE1', 'PE2']
+
+    - name: Check BGP status
+      block:
+        - name: Get BGP summary
+          vyos.vyos.vyos_command:
+            commands:
+              - show ip bgp summary
+          register: bgp_summary
+
+        - name: Display BGP summary
+          debug:
+            msg: "{{ bgp_summary.stdout_lines[0] }}"
+
+        - name: Get BGP routes
+          vyos.vyos.vyos_command:
+            commands:
+              - show ip bgp
+          register: bgp_routes
+
+        - name: Display BGP routes
+          debug:
+            msg: "{{ bgp_routes.stdout_lines[0] }}"
+      when: inventory_hostname in ['CE1', 'CE2', 'PE1', 'PE2']
+
+    - name: Check MPLS and LDP status (Provider network)
+      block:
+        - name: Get MPLS interfaces
+          vyos.vyos.vyos_command:
+            commands:
+              - show mpls interface
+          register: mpls_interfaces
+
+        - name: Display MPLS interfaces
+          debug:
+            msg: "{{ mpls_interfaces.stdout_lines[0] }}"
+
+        - name: Get LDP neighbors
+          vyos.vyos.vyos_command:
+            commands:
+              - show mpls ldp neighbor
+          register: ldp_neighbors
+
+        - name: Display LDP neighbors
+          debug:
+            msg: "{{ ldp_neighbors.stdout_lines[0] }}"
+
+        - name: Get MPLS table
+          vyos.vyos.vyos_command:
+            commands:
+              - show mpls table
+          register: mpls_table
+
+        - name: Display MPLS forwarding table
+          debug:
+            msg: "{{ mpls_table.stdout_lines[0] }}"
+      when: inventory_hostname in ['P1', 'P2', 'PE1', 'PE2']
+
+    - name: Summary
+      debug:
+        msg: |
+          Configuration Summary for {{ inventory_hostname }}:
+          {% if inventory_hostname in ['P1', 'P2'] %}
+          - OSPF: Area 0 (IGP for MPLS core)
+          - MPLS: Enabled on provider interfaces
+          - LDP: Enabled for label distribution
+          - BGP: Not configured (core router)
+          {% elif inventory_hostname in ['PE1', 'PE2'] %}
+          - OSPF: Area 0 (IGP for MPLS core)
+          - iBGP: AS 65000 (PE-to-PE)
+          - eBGP: Connected to customer sites
+          - MPLS: Enabled on provider interfaces
+          - LDP: Enabled with targeted sessions to other PEs
+          {% else %}
+          - eBGP: AS {{ router_config.protocols.bgp.asn }} (Customer AS)
+          - OSPF: Not configured (customer edge)
+          - MPLS: Not configured (customer edge)
+          {% endif %}

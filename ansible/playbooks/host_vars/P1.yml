@@ -1,28 +1,43 @@
 ---
-# P1 specific configurations
+# P1 Provider Core Router - Based on working L3VPN example
 router_config:
+  router_id: "10.0.0.2"
   interfaces:
+    loopback:
+      lo:
+        description: "Loopback for MPLS"
+        address: "10.0.0.2/32"
     ethernet:
       eth0:
         description: "Management Interface"
         address: "192.168.100.13/24"
       eth1:
         description: "To PE1"
-        address: "10.0.2.1/30"
+        address: "10.1.2.2/24"
       eth2:
         description: "To P2"
-        address: "10.0.3.1/30"
+        address: "10.2.3.2/24"
   protocols:
     ospf:
-      area:
-        "0":
-          network:
-            - "10.0.2.0/30"
-            - "10.0.3.0/30"
+      interfaces:
+        lo:
+          area: "0"
+        eth1:
+          area: "0"
+          network_type: "point-to-point"
+        eth2:
+          area: "0"
+          network_type: "point-to-point"
     mpls:
-      interface:
+      interfaces:
         - "eth1"
         - "eth2"
+      ldp:
+        router_id: "10.0.0.2"
+        transport_address: "10.0.0.2"
+        interfaces:
+          - "eth1"
+          - "eth2"
     static:
       route:
         "0.0.0.0/0":

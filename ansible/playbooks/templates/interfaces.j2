@@ -3,10 +3,19 @@
 {% for interface_type, interfaces in router_config.interfaces.items() %}
 {% for name, settings in interfaces.items() %}
 {% if settings.address is defined %}
+{% if settings.address is string %}
 set interfaces {{ interface_type }} {{ name }} address '{{ settings.address }}'
+{% else %}
+{% for addr in settings.address %}
+set interfaces {{ interface_type }} {{ name }} address '{{ addr }}'
+{% endfor %}
+{% endif %}
 {% endif %}
 {% if settings.description is defined %}
 set interfaces {{ interface_type }} {{ name }} description '{{ settings.description }}'
+{% endif %}
+{% if settings.vrf is defined %}
+set interfaces {{ interface_type }} {{ name }} vrf '{{ settings.vrf }}'
 {% endif %}
 {% endfor %}
 {% endfor %}

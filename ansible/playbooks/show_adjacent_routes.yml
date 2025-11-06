@@ -1,0 +1,116 @@
+---
+# Show routing information for two adjacent hosts
+# Usage examples:
+#   ansible-playbook ansible/playbooks/show_adjacent_routes.yml \
+#     -e 'adjacent_hosts=["CE1","PE1"] route_target=8.8.8.8'
+#   ansible-playbook ansible/playbooks/show_adjacent_routes.yml -e 'adjacent_hosts=["P1","P2"]'
+#
+# Variables:
+# - adjacent_hosts: list of exactly two inventory hostnames
+# - route_target: destination IP or prefix (default: 0.0.0.0/0)
+
+- name: Validate inputs
+  hosts: localhost
+  gather_facts: false
+  vars:
+    route_target: "{{ route_target | default('0.0.0.0/0') }}"
+  tasks:
+    - name: Ensure two adjacent hosts were provided
+      ansible.builtin.assert:
+        that:
+          - adjacent_hosts is defined
+          - adjacent_hosts | length == 2
+        fail_msg: >-
+          Provide exactly two hosts via: -e 'adjacent_hosts=["HOSTA","HOSTB"]'
+        success_msg: "Inspecting routes on {{ adjacent_hosts | join(', ') }} for {{ route_target }}"
+
+- name: Show routing to target on adjacent hosts
+  hosts: all
+  gather_facts: false
+  vars:
+    route_target: "{{ route_target | default('0.0.0.0/0') }}"
+  tasks:
+    - name: Run 'show ip route {{ route_target }}'
+      when: inventory_hostname in adjacent_hosts
+      vyos.vyos.vyos_command:
+        commands:
+          - "show ip route {{ route_target }}"
+      register: route_output
+
+    - name: Display separator
+      when: inventory_hostname in adjacent_hosts and route_output is defined
+      ansible.builtin.debug:
+        msg: "═══════════════════════════════════════════════════════════════════"
+
+    - name: Display host header
+      when: inventory_hostname in adjacent_hosts and route_output is defined
+      ansible.builtin.debug:
+        msg: "Router: {{ inventory_hostname }} | Destination: {{ route_target }}"
+
+    - name: Display route details
+      when: inventory_hostname in adjacent_hosts and route_output is defined
+      ansible.builtin.debug:
+        var: route_output.stdout_lines[0]
+
+    - name: Get interface topology
+      when: inventory_hostname in adjacent_hosts
+      vyos.vyos.vyos_command:
+        commands:
+          - show interfaces
+      register: interface_info
+
+    - name: Display interface connections
+      when: inventory_hostname in adjacent_hosts and interface_info is defined
+      ansible.builtin.debug:
+        msg: "{{ '─── Interface Connections on ' + inventory_hostname + ' ───' }}"
+
+    - name: Show interface details
+      when: inventory_hostname in adjacent_hosts and interface_info is defined
+      ansible.builtin.debug:
+        msg: "{{ interface_info.stdout_lines[0] | select('match', '^eth[0-9]\\s+.*') | list }}"
+
+    - name: Build connection map between adjacent hosts
+      when: inventory_hostname == adjacent_hosts[0]
+      ansible.builtin.set_fact:
+        connection_map: []
+      run_once: true
+
+    - name: Collect interface data for connection mapping
+      when: inventory_hostname in adjacent_hosts
+      ansible.builtin.set_fact:
+        my_interfaces: "{{ interface_info.stdout_lines[0] | select('match', '^eth[0-9]\\s+[0-9]+\\.[0-9]+') | list }}"
+
+    - name: Display connection topology summary
+      when: inventory_hostname == adjacent_hosts[0]
+      run_once: true
+      ansible.builtin.debug:
+        msg:
+          - ""
+          - "═══════════════════════ CONNECTION TOPOLOGY ════════════════════════"
+          - "Analyzing physical links between {{ adjacent_hosts[0] }} and {{ adjacent_hosts[1] }}"
+          - ""
+          - "{{ adjacent_hosts[0] }} Interfaces:"
+          - "{{ hostvars[adjacent_hosts[0]].my_interfaces | default([]) | join('\n') }}"
+          - ""
+          - "{{ adjacent_hosts[1] }} Interfaces:"
+          - "{{ hostvars[adjacent_hosts[1]].my_interfaces | default([]) | join('\n') }}"
+          - ""
+          - "Look for matching /30 or /31 subnets to identify direct connections"
+          - "═══════════════════════════════════════════════════════════════════="
+
+    - name: Also show full table (optional)
+      when: (inventory_hostname in adjacent_hosts) and (show_full | default(false) | bool)
+      vyos.vyos.vyos_command:
+        commands:
+          - show ip route
+      register: full_table
+
+    - name: Display full table separator
+      when: (inventory_hostname in adjacent_hosts) and (full_table is defined)
+      ansible.builtin.debug:
+        msg: "─── Full Routing Table for {{ inventory_hostname }} ───"
+
+    - name: Print full table (optional)
+      when: (inventory_hostname in adjacent_hosts) and (full_table is defined)
+      ansible.builtin.debug:
+        var: full_table.stdout_lines[0]

@@ -1,6 +1,7 @@
 ---
-# CE1 specific configurations
+# CE1 Customer Edge Router - Based on working L3VPN example
 router_config:
+  router_id: "172.16.0.2"
   interfaces:
     ethernet:
       eth0:
@@ -8,12 +9,24 @@ router_config:
         address: "192.168.100.11/24"
       eth1:
         description: "To PE1"
-        address: "10.0.1.2/30"
+        address: "172.16.0.2/30"
+    loopback:
+      lo:
+        description: "Customer LAN - Site 1"
+        address: "10.0.1.1/24"
   protocols:
-    ospf:
-      area:
-        "0":
-          network: "10.0.1.0/30"
+    bgp:
+      asn: "65001"
+      neighbors:
+        "172.16.0.1":
+          remote_as: "65000"
+          description: "eBGP to PE1"
+          address_family:
+            - "ipv4-unicast"
+      address_family:
+        ipv4_unicast:
+          networks:
+            - "10.0.1.0/24"
     static:
       route:
         "0.0.0.0/0":
